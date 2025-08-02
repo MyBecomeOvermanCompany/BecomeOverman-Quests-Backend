@@ -120,15 +120,22 @@ func (h *QuestHandler) StartQuestHandler(c *gin.Context) {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param X-User-ID header int true "User ID"
+// @Param questID path int true "Quest ID"
 // @Param taskID path int true "Task ID"
 // @Success 200
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /tasks/{taskID}/complete [post]
+// @Router /quests/{questID}/{taskID}/complete [post]
 func (h *QuestHandler) CompleteTaskHandler(c *gin.Context) {
 	userID, err := strconv.Atoi(c.GetHeader("X-User-ID"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	questID, err := strconv.Atoi(c.Param("questID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quest ID"})
 		return
 	}
 
@@ -138,7 +145,7 @@ func (h *QuestHandler) CompleteTaskHandler(c *gin.Context) {
 		return
 	}
 
-	if err := h.questService.CompleteTask(c.Request.Context(), userID, taskID); err != nil {
+	if err := h.questService.CompleteTask(c.Request.Context(), userID, questID, taskID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -190,10 +197,6 @@ func RegisterQuestRoutes(router *gin.RouterGroup, questService *services.QuestSe
 		questGroup.POST("/:questID/purchase", handler.PurchaseQuestHandler)
 		questGroup.POST("/:questID/start", handler.StartQuestHandler)
 		questGroup.POST("/:questID/complete", handler.CompleteQuestHandler)
-	}
-
-	taskGroup := router.Group("/tasks")
-	{
-		taskGroup.POST("/:taskID/complete", handler.CompleteTaskHandler)
+		questGroup.POST("/:questID/:taskID/complete", handler.CompleteTaskHandler)
 	}
 }
