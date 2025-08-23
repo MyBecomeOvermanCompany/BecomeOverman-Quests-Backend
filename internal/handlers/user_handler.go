@@ -35,6 +35,12 @@ func (h *UserHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
+
+	if len(req.Username) == 0 || len(req.Password) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username and Password can't be empty"})
+		return
+	}
+
 	if err := h.service.Register(req.Username, req.Email, req.Password); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return

@@ -42,6 +42,55 @@ func (r *QuestRepository) GetAvailableQuests(ctx context.Context, userID int) ([
 	return quests, nil
 }
 
+func (r *QuestRepository) GetQuestShop(ctx context.Context, userID int) ([]models.Quest, error) {
+	var quests []models.Quest
+
+	query := `
+	SELECT q.* FROM quests q
+	WHERE NOT EXISTS (
+		SELECT 1 FROM user_quests uq
+		WHERE uq.quest_id = q.id AND uq.user_id = $1
+	)`
+	// + TODO: conditions_json нужно проверить
+
+	// Получаем все квесты, что у нас не куплены и не были пройдены
+	if err := r.db.SelectContext(ctx, &quests, query, userID); err != nil {
+		return nil, err
+	}
+
+	return quests, nil
+}
+
+func (r *QuestRepository) GetMyActiveQuests(ctx context.Context, userID int) ([]models.Quest, error) {
+	var quests []models.Quest
+
+	query := `
+	SELECT uq.* FROM user_quests uq
+	WHERE uq.user_id = $1 AND NOT uq.status = 'completed'
+	`
+
+	if err := r.db.SelectContext(ctx, &quests, query, userID); err != nil {
+		return nil, err
+	}
+
+	return quests, nil
+}
+
+func (r *QuestRepository) GetMyCompletedQuests(ctx context.Context, userID int) ([]models.Quest, error) {
+	var quests []models.Quest
+
+	query := `
+	SELECT uq.* FROM user_quests uq
+	WHERE uq.user_id = $1 AND uq.status = 'completed'
+	`
+
+	if err := r.db.SelectContext(ctx, &quests, query, userID); err != nil {
+		return nil, err
+	}
+
+	return quests, nil
+}
+
 // PurchaseQuest покупает квест для пользователя
 func (r *QuestRepository) PurchaseQuest(ctx context.Context, userID, questID int) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -61,9 +110,7 @@ func (r *QuestRepository) PurchaseQuest(ctx context.Context, userID, questID int
 	var alreadyUsed bool
 	err = tx.GetContext(ctx, &alreadyUsed, `
 		SELECT EXISTS(
-			SELECT 1 FROM user_current_quests WHERE user_id = $1 AND quest_id = $2
-		) OR EXISTS(
-			SELECT 1 FROM user_completed_quests WHERE user_id = $1 AND quest_id = $2
+			SELECT 1 FROM usert_quests WHERE user_id = $1 AND quest_id = $2
 		)`, userID, questID,
 	)
 
@@ -96,7 +143,7 @@ func (r *QuestRepository) PurchaseQuest(ctx context.Context, userID, questID int
 
 	// Добавляем квест пользователю
 	_, err = tx.ExecContext(ctx, `
-        INSERT INTO user_current_quests 
+        INSERT INTO user_quests 
         (user_id, quest_id, status, started_at, expires_at)
         VALUES ($1, $2, 'purchased', NULL, NULL)`,
 		userID, questID)
@@ -130,7 +177,7 @@ func (r *QuestRepository) StartQuest(ctx context.Context, userID, questID int) e
 	expiresAt := time.Now().Add(time.Duration(timeLimitHours) * time.Hour)
 
 	_, err = r.db.ExecContext(ctx, `
-        UPDATE user_current_quests 
+        UPDATE user_quests 
         SET status = 'started', started_at = NOW(), expires_at = $1
         WHERE user_id = $2 AND quest_id = $3 AND status = 'purchased'`,
 		expiresAt, userID, questID)
@@ -150,11 +197,9 @@ func (r *QuestRepository) CompleteTask(ctx context.Context, userID, questID, tas
 	var exists bool
 	err = tx.GetContext(ctx, &exists, `
 		SELECT EXISTS (
-			SELECT 1 FROM user_current_quests WHERE user_id = $1 AND quest_id = $2 AND status = 'started'
+			SELECT 1 FROM user_quests WHERE user_id = $1 AND quest_id = $2 AND status = 'started'
 		) AND EXISTS (
 			SELECT 1 FROM quest_tasks WHERE quest_id = $2 AND task_id = $3
-		) AND NOT EXISTS(
-			SELECT 1 FROM user_completed_tasks WHERE user_id = $1 AND task_id = $3
 		)`, userID, questID, taskID,
 	)
 	if err != nil {
@@ -178,7 +223,7 @@ func (r *QuestRepository) CompleteTask(ctx context.Context, userID, questID, tas
 
 	// Увеличиваем счетчик выполненных задач
 	_, err = tx.ExecContext(ctx, `
-        UPDATE user_current_quests 
+        UPDATE user_quests 
         SET tasks_done = tasks_done + 1
         WHERE user_id = $1 AND quest_id = $2`,
 		userID, questID)
@@ -206,7 +251,7 @@ func (r *QuestRepository) CompleteQuest(ctx context.Context, userID, questID int
 	}
 
 	err = tx.GetContext(ctx, &completedTasks, `
-        SELECT tasks_done FROM user_current_quests 
+        SELECT tasks_done FROM user_quests 
         WHERE user_id = $1 AND quest_id = $2`,
 		userID, questID)
 	if err != nil {
@@ -239,19 +284,10 @@ func (r *QuestRepository) CompleteQuest(ctx context.Context, userID, questID int
 
 	// Переносим квест в завершенные
 	_, err = tx.ExecContext(ctx, `
-        INSERT INTO user_completed_quests 
+        INSERT INTO user_quests 
         (user_id, quest_id, completed_at, xp_gained, coin_gained)
         VALUES ($1, $2, NOW(), $3, $4)`,
 		userID, questID, rewardXP, rewardCoin)
-	if err != nil {
-		return err
-	}
-
-	// Удаляем из активных
-	_, err = tx.ExecContext(ctx, `
-        DELETE FROM user_current_quests 
-        WHERE user_id = $1 AND quest_id = $2`,
-		userID, questID)
 	if err != nil {
 		return err
 	}

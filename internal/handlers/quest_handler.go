@@ -46,6 +46,87 @@ func (h *QuestHandler) GetAvailableQuestsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, quests)
 }
 
+// GetQuestShopHandler handles the GET request for quest shop
+// @Summary Get quest shop for user
+// @Description Returns quest shop
+// @Tags Quests
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Quest
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /quests/shop [get]
+func (h *QuestHandler) GetQuestShopHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	quests, err := h.questService.GetQuestShop(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, quests)
+}
+
+// GetMyActiveQuests handles the GET request for active quests
+// @Summary Get active quests for user
+// @Description Returns active quests for user
+// @Tags Quests
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Quest
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /quests/active [get]
+func (h *QuestHandler) GetMyActiveQuestsHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	quests, err := h.questService.GetMyActiveQuests(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, quests)
+}
+
+// GetMyCompletedQuests handles the GET request for completed quests
+// @Summary Get completed quests for user
+// @Description Returns completed quests for user
+// @Tags Quests
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {array} models.Quest
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /quests/completed [get]
+func (h *QuestHandler) GetMyCompletedQuests(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	quests, err := h.questService.GetMyCompletedQuests(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, quests)
+}
+
 // PurchaseQuestHandler handles the POST request to purchase a quest
 // @Summary Purchase a quest
 // @Description Allows user to purchase a quest if they have enough currency
@@ -192,6 +273,9 @@ func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService
 	questGroup.Use(middleware.JWTAuthMiddleware())
 	{
 		questGroup.GET("/available", handler.GetAvailableQuestsHandler)
+		questGroup.GET("/shop", handler.GetQuestShopHandler)
+		questGroup.GET("/active", handler.GetMyActiveQuestsHandler)
+		questGroup.GET("/completed", handler.GetMyCompletedQuests)
 		questGroup.POST("/:questID/purchase", handler.PurchaseQuestHandler)
 		questGroup.POST("/:questID/start", handler.StartQuestHandler)
 		questGroup.POST("/:questID/complete", handler.CompleteQuestHandler)
