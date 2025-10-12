@@ -30,8 +30,8 @@ func (s *QuestService) StartQuest(ctx context.Context, userID, questID int) erro
 }
 
 // CompleteTask marks a task as completed by the user
-func (s *QuestService) CompleteTask(ctx context.Context, userID, taskID int) error {
-	return s.questRepo.CompleteTask(ctx, userID, taskID)
+func (s *QuestService) CompleteTask(ctx context.Context, userID, questID, taskID int) error {
+	return s.questRepo.CompleteTask(ctx, userID, questID, taskID)
 }
 
 // CompleteQuest finalizes the quest completion

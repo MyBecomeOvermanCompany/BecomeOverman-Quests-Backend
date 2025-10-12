@@ -50,11 +50,29 @@ func (r *QuestRepository) PurchaseQuest(ctx context.Context, userID, questID int
 	}
 	defer tx.Rollback()
 
-	// Проверяем, что квест доступен
+	// Проверяем, что квест существует
 	var quest models.Quest
 	err = tx.GetContext(ctx, &quest, "SELECT * FROM quests WHERE id = $1", questID)
 	if err != nil {
 		return err
+	}
+
+	// Проверяем что такой квест у нас не куплен и не был пройден
+	var alreadyUsed bool
+	err = tx.GetContext(ctx, &alreadyUsed, `
+		SELECT EXISTS(
+			SELECT 1 FROM user_current_quests WHERE user_id = $1 AND quest_id = $2
+		) OR EXISTS(
+			SELECT 1 FROM user_completed_quests WHERE user_id = $1 AND quest_id = $2
+		)`, userID, questID,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if alreadyUsed {
+		return errors.New("quest already purchased or completed")
 	}
 
 	// Проверяем баланс пользователя
@@ -121,23 +139,30 @@ func (r *QuestRepository) StartQuest(ctx context.Context, userID, questID int) e
 }
 
 // CompleteTask отмечает выполнение задачи
-func (r *QuestRepository) CompleteTask(ctx context.Context, userID, taskID int) error {
+func (r *QuestRepository) CompleteTask(ctx context.Context, userID, questID, taskID int) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	// Проверяем, что задача принадлежит активному квесту
-	var questID int
-	err = tx.GetContext(ctx, &questID, `
-        SELECT q.id FROM quests q
-        JOIN quest_tasks qt ON q.id = qt.quest_id
-        JOIN user_current_quests ucq ON q.id = ucq.quest_id
-        WHERE ucq.user_id = $1 AND qt.task_id = $2 AND ucq.status = 'started'`,
-		userID, taskID)
+	// Проверяем, что такой квест и задача в нем - существуют и еще не выполнены
+	var exists bool
+	err = tx.GetContext(ctx, &exists, `
+		SELECT EXISTS (
+			SELECT 1 FROM user_current_quests WHERE user_id = $1 AND quest_id = $2 AND status = 'started'
+		) AND EXISTS (
+			SELECT 1 FROM quest_tasks WHERE quest_id = $2 AND task_id = $3
+		) AND NOT EXISTS(
+			SELECT 1 FROM user_completed_tasks WHERE user_id = $1 AND task_id = $3
+		)`, userID, questID, taskID,
+	)
 	if err != nil {
 		return err
+	}
+
+	if !exists {
+		return errors.New("quest or task not found or already completed")
 	}
 
 	// Добавляем задачу в буфер выполненных
