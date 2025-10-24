@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS task_variants CASCADE;
 DROP TABLE IF EXISTS tasks CASCADE;
 DROP TABLE IF EXISTS user_completed_quests CASCADE;
 DROP TABLE IF EXISTS user_current_quests CASCADE;
+DROP TABLE IF EXISTS user_quests CASCADE;
 DROP TABLE IF EXISTS quest_tasks CASCADE;
 DROP TABLE IF EXISTS quests CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -30,20 +31,23 @@ CREATE TABLE users (
     username VARCHAR(100) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    is_premium BOOLEAN DEFAULT FALSE,
-    -- avatar_url VARCHAR(255),
+
     xp_points INT DEFAULT 0,
     coin_balance INT DEFAULT 0,
+    level INT DEFAULT 0,
+
     -- TODO: если появятся еще ветки то поправим
     health_level INT DEFAULT 0,
+    mental_health_level INT DEFAULT 0,
     intelligence_level INT DEFAULT 0,
     charisma_level INT DEFAULT 0,
     willpower_level INT DEFAULT 0,
-    level INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     current_streak INT DEFAULT 0,
-    longest_streak INT DEFAULT 0
+    longest_streak INT DEFAULT 0,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Таблица задач
@@ -51,21 +55,17 @@ CREATE TABLE tasks (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     description TEXT,
+
     difficulty INT DEFAULT 0,
-    rarity VARCHAR(100) NOT NULL DEFAULT 'free', -- 'free', 'common', 'rare', 'epic', 'legendary'
-    category VARCHAR(100) NOT NULL,
-    -- type task_type NOT NULL DEFAULT 'daily',
+    rarity VARCHAR(255) NOT NULL DEFAULT 'free', -- 'free', 'common', 'rare', 'epic', 'legendary'
+    category VARCHAR(255) NOT NULL,
     base_xp_reward INT NOT NULL DEFAULT 0,
     base_coin_reward INT NOT NULL DEFAULT 0,
-    -- TODO: если появятся еще ветки то поправим
-    required_health_level INT DEFAULT 0,
-    required_intelligence_level INT DEFAULT 0,
-    required_charisma_level INT DEFAULT 0,
-    required_willpower_level INT DEFAULT 0,
-    -- TODO: сколько приносит опыта в каждой ветке при выполнении
-    -- cooldown_hours INT DEFAULT 24,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    -- updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+    -- type task_type NOT NULL DEFAULT 'daily',
+    -- cooldown_hours INT DEFAULT 24,
 );
 
 -- Завершенные задачи пользователя
@@ -73,25 +73,31 @@ CREATE TABLE user_completed_tasks (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
     task_id INT NOT NULL,
+
     is_confirmed BOOL DEFAULT FALSE NOT NULL,
     completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     xp_gained INT NOT NULL,
     coin_gained INT NOT NULL,
+
     -- TODO: сколько принесла опыта в каждой ветке при выполнении
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
--- Транзакции валюты пользователя ???
+-- Транзакции валюты пользователя
 CREATE TABLE user_coin_transactions (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
-    amount INT NOT NULL,
-    transaction_type VARCHAR(50) NOT NULL, -- 'earned', 'spent', 'bonus'
     reference_type VARCHAR(50) NOT NULL,
     reference_id INT, -- ID связанной сущности (задача, покупка и т.д.)
+
+    transaction_type VARCHAR(50) NOT NULL, -- 'earned', 'spent', 'bonus'
+    amount INT NOT NULL,
+    
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -100,8 +106,8 @@ CREATE TABLE achievements (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    -- icon_url VARCHAR(255),
     criteria_json JSONB NOT NULL, -- например: {"tasks_completed": 100}
+    bonus_json JSONB, -- например заморозка или пассивный бонус
     reward_xp INT DEFAULT 0,
     reward_coin INT DEFAULT 0,
     is_secret BOOLEAN DEFAULT FALSE
@@ -127,12 +133,13 @@ CREATE TABLE quests (
     rarity VARCHAR(255) NOT NULL, -- 'free', 'common', 'rare', 'epic', 'legendary'
     difficulty INT NOT NULL DEFAULT 0,
     price INT NOT NULL DEFAULT 0,
-    -- required_tasks_completed INT DEFAULT 1, -- Сколько задач нужно выполнить для завершения
-    -- is_sequential BOOLEAN DEFAULT FALSE,   -- Нужно ли выполнять по порядку
+    tasks_count INT DEFAULT 1, -- Сколько задач в квесте
+    conditions_json JSONB,
+    bonus_json JSONB,
+    is_sequential BOOLEAN DEFAULT FALSE,   -- Нужно ли выполнять по порядку
     reward_xp INT NOT NULL,
     reward_coin INT NOT NULL,
-    time_limit_hours INT              -- Ограничение по времени (опционально)
-    -- is_repeatable BOOLEAN DEFAULT FALSE   -- Можно ли проходить квест повторно
+    time_limit_hours INT DEFAULT 0          -- Ограничение по времени (опционально)
 );
 
 -- Связь квестов и задач (какие задачи входят в квест)
@@ -140,36 +147,29 @@ CREATE TABLE quest_tasks (
     id SERIAL PRIMARY KEY,
     quest_id INT NOT NULL,
     task_id INT NOT NULL,
+
     task_order INT,                        -- Порядок (если is_sequential = TRUE)
+
     FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
 -- Прогресс пользователя по квестам
-CREATE TABLE user_current_quests (
+CREATE TABLE user_quests (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
     quest_id INT NOT NULL,
+
     status VARCHAR(255) NOT NULL DEFAULT 'purchased', -- "purchased", "started", "failed", "completed"
     tasks_done INT DEFAULT 0,
+
+    xp_gained INT,
+    coin_gained INT,
+
     started_at TIMESTAMP,
     completed_at TIMESTAMP,
     expires_at TIMESTAMP,
+
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE
 );
-
--- Завершенные квесты пользователя
-CREATE TABLE user_completed_quests (
-    id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL,
-    quest_id INT NOT NULL,
-    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    xp_gained INT NOT NULL,
-    coin_gained INT NOT NULL,
-    -- TODO: сколько принесла опыта в каждой ветке при выполнении
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE
-);
-
--- TODO: user_inventory - бонусы, заморозки, дебафы и так далее

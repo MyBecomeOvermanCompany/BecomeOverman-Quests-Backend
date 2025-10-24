@@ -19,6 +19,18 @@ func (s *QuestService) GetAvailableQuests(ctx context.Context, userID int) ([]mo
 	return s.questRepo.GetAvailableQuests(ctx, userID)
 }
 
+func (s *QuestService) GetQuestShop(ctx context.Context, userID int) ([]models.Quest, error) {
+	return s.questRepo.GetQuestShop(ctx, userID)
+}
+
+func (s *QuestService) GetMyActiveQuests(ctx context.Context, userID int) ([]models.Quest, error) {
+	return s.questRepo.GetMyActiveQuests(ctx, userID)
+}
+
+func (s *QuestService) GetMyCompletedQuests(ctx context.Context, userID int) ([]models.Quest, error) {
+	return s.questRepo.GetMyCompletedQuests(ctx, userID)
+}
+
 // PurchaseQuest handles the purchase of a quest by a user
 func (s *QuestService) PurchaseQuest(ctx context.Context, userID, questID int) error {
 	return s.questRepo.PurchaseQuest(ctx, userID, questID)

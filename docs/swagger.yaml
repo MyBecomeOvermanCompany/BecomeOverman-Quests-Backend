@@ -223,6 +223,37 @@ paths:
       summary: Start a purchased quest
       tags:
       - Quests
+  /quests/active:
+    get:
+      consumes:
+      - application/json
+      description: Returns active quests for user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Quest'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get active quests for user
+      tags:
+      - Quests
   /quests/available:
     get:
       consumes:
@@ -253,6 +284,68 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get available quests for user
+      tags:
+      - Quests
+  /quests/completed:
+    get:
+      consumes:
+      - application/json
+      description: Returns completed quests for user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Quest'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get completed quests for user
+      tags:
+      - Quests
+  /quests/shop:
+    get:
+      consumes:
+      - application/json
+      description: Returns quest shop
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Quest'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get quest shop for user
       tags:
       - Quests
   /user/login:
