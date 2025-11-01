@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/services"
 	"BecomeOverMan/pkg/middleware"
 	"net/http"
@@ -18,6 +19,30 @@ func NewQuestHandler(questService *services.QuestService) *QuestHandler {
 }
 
 // ==== Handlers ====
+
+// GetQuestDetails возвращает детали квеста с задачами
+func (h *QuestHandler) GetQuestDetails(c *gin.Context) {
+	questIDStr := c.Param("id")
+	questID, err := strconv.Atoi(questIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quest ID"})
+		return
+	}
+
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	questDetails, err := h.questService.GetQuestDetails(c.Request.Context(), questID, userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Quest not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, questDetails)
+}
 
 // GetAvailableQuestsHandler handles the GET request for available quests
 // @Summary Get available quests for user
@@ -265,6 +290,39 @@ func (h *QuestHandler) CompleteQuestHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// CreateSharedQuest godoc
+// @Summary Create shared quest
+// @Description Create a shared quest with a friend
+// @Tags quests
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param request body models.CreateSharedQuestRequest true "Shared quest request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /quests/shared [post]
+func (h *QuestHandler) CreateSharedQuest(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req models.CreateSharedQuestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	if err := h.questService.CreateSharedQuest(userID, req.FriendID, req.QuestID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Shared quest created successfully"})
+}
+
 // RegisterQuestRoutes sets up the routes for quest handling with Gin
 func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService) {
 	handler := NewQuestHandler(questService)
@@ -272,6 +330,7 @@ func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService
 	questGroup := router.Group("/quests")
 	questGroup.Use(middleware.JWTAuthMiddleware())
 	{
+		questGroup.GET("/:questID/details", handler.GetQuestDetails)
 		questGroup.GET("/available", handler.GetAvailableQuestsHandler)
 		questGroup.GET("/shop", handler.GetQuestShopHandler)
 		questGroup.GET("/active", handler.GetMyActiveQuestsHandler)
@@ -280,5 +339,7 @@ func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService
 		questGroup.POST("/:questID/start", handler.StartQuestHandler)
 		questGroup.POST("/:questID/complete", handler.CompleteQuestHandler)
 		questGroup.POST("/:questID/:taskID/complete", handler.CompleteTaskHandler)
+
+		questGroup.POST("/shared", handler.CreateSharedQuest)
 	}
 }

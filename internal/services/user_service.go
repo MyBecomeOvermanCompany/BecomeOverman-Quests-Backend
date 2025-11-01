@@ -1,10 +1,12 @@
 package services
 
 import (
+	"BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/repositories"
 	"errors"
-	"golang.org/x/crypto/bcrypt"
 	"log"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService struct {
@@ -47,4 +49,12 @@ func (s *UserService) Login(username, password string) (int, error) {
 	log.Printf("User %s logged in successfully", username)
 
 	return user.ID, nil
+}
+
+func (s *UserService) AddFriend(userID, friendID int) error {
+	return s.repo.AddFriend(userID, friendID)
+}
+
+func (s *UserService) GetFriends(userID int) ([]models.Friend, error) {
+	return s.repo.GetFriends(userID)
 }

@@ -50,3 +50,11 @@ func (s *QuestService) CompleteTask(ctx context.Context, userID, questID, taskID
 func (s *QuestService) CompleteQuest(ctx context.Context, userID, questID int) error {
 	return s.questRepo.CompleteQuest(ctx, userID, questID)
 }
+
+func (s *QuestService) GetQuestDetails(ctx context.Context, questID, userID int) (*models.Quest, error) {
+	return s.questRepo.GetQuestDetails(ctx, questID, userID)
+}
+
+func (s *QuestService) CreateSharedQuest(user1ID, user2ID, questID int) error {
+	return s.questRepo.CreateSharedQuest(user1ID, user2ID, questID)
+}
