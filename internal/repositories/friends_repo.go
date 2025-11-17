@@ -102,48 +102,50 @@ func (r *QuestRepository) startQuestForUser(tx *sqlx.Tx, userID, questID int) er
 		return err
 	}
 
-	if !alreadyPurchased {
-		// Получаем цену квеста
-		var price int
-		err := tx.Get(&price, "SELECT price FROM quests WHERE id = $1", questID)
-		if err != nil {
-			return err
-		}
+	if alreadyPurchased {
+		return errors.New("quest already purchased")
+	}
 
-		// Проверяем баланс
-		var balance int
-		err = tx.Get(&balance, "SELECT coin_balance FROM users WHERE id = $1", userID)
-		if err != nil {
-			return err
-		}
+	// Получаем цену квеста
+	var price int
+	err = tx.Get(&price, "SELECT price FROM quests WHERE id = $1", questID)
+	if err != nil {
+		return err
+	}
 
-		if balance < price {
-			return errors.New("not enough coins for shared quest")
-		}
+	// Проверяем баланс
+	var balance int
+	err = tx.Get(&balance, "SELECT coin_balance FROM users WHERE id = $1", userID)
+	if err != nil {
+		return err
+	}
 
-		// Покупаем квест
-		_, err = tx.Exec(`
+	if balance < price {
+		return errors.New("not enough coins for shared quest")
+	}
+
+	// Покупаем квест
+	_, err = tx.Exec(`
 			INSERT INTO user_quests (user_id, quest_id, status, tasks_done) 
 			VALUES ($1, $2, 'purchased', 0)`,
-			userID, questID)
-		if err != nil {
-			return err
-		}
+		userID, questID)
+	if err != nil {
+		return err
+	}
 
-		// Списываем монеты
-		_, err = tx.Exec(`
+	// Списываем монеты
+	_, err = tx.Exec(`
 			UPDATE users SET coin_balance = coin_balance - $1 WHERE id = $2`,
-			price, userID)
-		if err != nil {
-			return err
-		}
+		price, userID)
+	if err != nil {
+		return err
 	}
 
 	// Стартуем квест
 	_, err = tx.Exec(`
-		UPDATE user_quests 
-		SET status = 'started', started_at = NOW() 
-		WHERE user_id = $1 AND quest_id = $2`,
+			UPDATE user_quests 
+			SET status = 'started', started_at = NOW() 
+			WHERE user_id = $1 AND quest_id = $2`,
 		userID, questID)
 
 	return err
