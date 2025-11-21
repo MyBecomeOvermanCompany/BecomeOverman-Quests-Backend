@@ -58,3 +58,32 @@ func (s *QuestService) GetQuestDetails(ctx context.Context, questID, userID int)
 func (s *QuestService) CreateSharedQuest(user1ID, user2ID, questID int) error {
 	return s.questRepo.CreateSharedQuest(user1ID, user2ID, questID)
 }
+
+// GenerateAIQuest вызывает Python скрипт для генерации квеста
+func (s *QuestService) GenerateAIQuest(userMessage string) (*models.AIQuestResponse, error) {
+	// cleanMessage := strings.ReplaceAll(userMessage, "\"", "\\\"")
+
+	// cmd := exec.Command("python", "neural.py", cleanMessage)
+
+	// output, err := cmd.Output()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error calling Python script: %v", err)
+	// }
+
+	// result := strings.TrimSpace(string(output))
+
+	// // Парсим JSON ответ
+	// var aiResponse models.AIQuestResponse
+	// err = json.Unmarshal([]byte(result), &aiResponse)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error parsing AI response: %v", err)
+	// }
+
+	// return &aiResponse, nil
+
+	return GenerateAIQuestGo(userMessage)
+}
+
+func (s *QuestService) SaveQuestToDB(quest *models.Quest, tasks []models.Task) (int, error) {
+	return s.questRepo.SaveQuestToDB(quest, tasks)
+}
