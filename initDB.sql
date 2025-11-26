@@ -173,3 +173,24 @@ CREATE TABLE user_quests (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (quest_id) REFERENCES quests(id) ON DELETE CASCADE
 );
+
+-- friends
+-- Друзья
+CREATE TABLE friends (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    friend_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, friend_id)
+);
+
+-- Совместные квесты
+CREATE TABLE shared_quests (
+    id SERIAL PRIMARY KEY,
+    quest_id INTEGER NOT NULL REFERENCES quests(id) ON DELETE CASCADE,
+    user1_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user2_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
