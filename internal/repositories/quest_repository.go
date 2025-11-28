@@ -303,15 +303,15 @@ func (r *QuestRepository) CompleteQuest(ctx context.Context, userID, questID int
 	// Проверяем, является ли квест совместным
 	var sharedQuestID int
 	var friendID int
-	err = tx.GetContext(ctx, &sharedQuestID, `
-        SELECT id, 
+	err = tx.QueryRowContext(ctx,
+		`SELECT id, 
             CASE 
                 WHEN user1_id = $1 THEN user2_id 
                 ELSE user1_id 
             END as friend_id
         FROM shared_quests 
         WHERE quest_id = $2 AND (user1_id = $1 OR user2_id = $1) AND status = 'active'`,
-		userID, questID)
+		userID, questID).Scan(&sharedQuestID, &friendID)
 
 	isSharedQuest := (err == nil)
 
