@@ -797,29 +797,29 @@
                 grid-template-columns: repeat(2, 1fr);
                 gap: 10px;
             }
-            
+
             .stat-card {
                 padding: 12px;
                 min-height: 90px;
             }
-            
+
             .stat-icon {
                 font-size: 1.3rem;
                 margin-bottom: 6px;
             }
-            
+
             .stat-value {
                 font-size: 1rem;
             }
-            
+
             .stat-label {
                 font-size: 0.75rem;
             }
-            
+
             .quest-title {
                 font-size: 1.5rem !important;
             }
-            
+
             .quest-description {
                 font-size: 0.9rem !important;
             }
@@ -830,45 +830,45 @@
                 grid-template-columns: repeat(2, 1fr);
                 gap: 8px;
             }
-            
+
             .stat-card {
                 padding: 10px;
                 min-height: 80px;
             }
-            
+
             .stat-icon {
                 font-size: 1.2rem;
                 margin-bottom: 4px;
             }
-            
+
             .stat-value {
                 font-size: 0.9rem;
             }
-            
+
             .stat-label {
                 font-size: 0.7rem;
             }
-            
+
             .quest-header {
                 padding: 20px !important;
             }
-            
+
             .quest-title {
                 font-size: 1.3rem !important;
             }
-            
+
             .task-header {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 8px;
             }
-            
+
             .task-meta {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 8px;
             }
-            
+
             .task-reward {
                 width: 100%;
                 justify-content: space-between;
@@ -880,7 +880,7 @@
             .quest-stats {
                 grid-template-columns: 1fr;
             }
-            
+
             .stat-card {
                 min-height: 70px;
                 flex-direction: row;
@@ -888,12 +888,12 @@
                 text-align: left;
                 gap: 12px;
             }
-            
+
             .stat-icon {
                 margin-bottom: 0;
                 flex-shrink: 0;
             }
-            
+
             .stat-info {
                 flex: 1;
             }
@@ -1249,16 +1249,16 @@
                 grid-template-columns: 1fr;
                 gap: 12px;
             }
-            
+
             .profile-card {
                 padding: 12px;
                 font-size: 0.9rem;
             }
-            
+
             .profile-header {
                 padding: 15px;
             }
-            
+
             .profile-header h4 {
                 font-size: 1.2rem;
             }
@@ -1268,13 +1268,64 @@
             .profile-grid {
                 gap: 10px;
             }
-            
+
             .profile-card {
                 padding: 10px;
                 font-size: 0.85rem;
             }
         }
 
+        /* Стили для простой формы */
+        .simple-form {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .prompt-input {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: 2px solid var(--gray-light);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s ease;
+            background: white;
+            margin-bottom: 20px;
+        }
+
+        .prompt-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--gray-light);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
 
@@ -1293,6 +1344,7 @@
             <button class="tab active" onclick="openTab('auth')"><span>🔐 Авторизация</span></button>
             <button class="tab" onclick="openTab('profile')"><span>👤 Профиль</span></button>
             <button class="tab" onclick="openTab('quests')"><span>🎯 Квесты</span></button>
+            <button class="tab" onclick="openTab('ai-quests')"><span>🤖 AI Квесты</span></button>
             <button class="tab" onclick="openTab('friends')"><span>👥 Друзья</span></button>
             <button class="tab" onclick="openTab('my-quests')"><span>📚 Мои квесты</span></button>
         </div>
@@ -1336,6 +1388,27 @@
             <div id="quest-details" class="quest-details"></div>
         </div>
 
+        <!-- ПРОСТАЯ ВКЛАДКА: AI Генерация квестов -->
+        <div id="ai-quests" class="tab-content">
+            <h3>🤖 Создать квест с помощью AI</h3>
+
+            <div class="simple-form">
+                <textarea id="ai-prompt" class="prompt-input" placeholder="🎯 Опишите, какой квест вы хотите создать...
+                    Например: 'Квест для развития силы воли и физического здоровья'
+                    Или: 'Интеллектуальный квест для улучшения памяти'
+                    Или: 'Социальный квест для развития коммуникативных навыков'"></textarea>
+
+                <div class="loading-spinner" id="ai-loading">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 10px; color: var(--gray);">ИИ генерирует ваш квест...</p>
+                </div>
+
+                <button class="btn btn-primary" onclick="generateAIQuest()" id="generate-btn" style="width: 100%;">
+                    🚀 Сгенерировать квест
+                </button>
+            </div>
+        </div>
+
         <!-- Друзья -->
         <div id="friends" class="tab-content">
             <h3>👥 Добавить друга</h3>
@@ -1360,8 +1433,8 @@
                 <h3>📋 Задачи квеста: <span id="active-quest-title"></span></h3>
                 <div id="tasks-list"></div>
                 <button class="btn btn-warning" onclick="completeActiveQuest()" id="complete-quest-btn"
-                    style="margin-top: 10px;">🏁 Завершить квест</button>
-                <button class="btn btn-info" onclick="hideActiveQuestTasks()" style="margin-top: 10px;">📥 Скрыть
+                    style="margin-top: 10px;">Завершить квест</button>
+                <button class="btn btn-info" onclick="hideActiveQuestTasks()" style="margin-top: 10px;">Скрыть
                     задачи</button>
             </div>
 
@@ -1381,7 +1454,7 @@
             show({ title, message, type = 'info', duration = 5000 }) {
                 const notification = document.createElement('div');
                 notification.className = `notification ${type}`;
-                
+
                 const icons = {
                     success: '✓',
                     error: '✕',
@@ -1474,7 +1547,47 @@
             return notificationSystem.info(message);
         }
 
-        // Остальной код остается без изменений
+        // ПРОСТАЯ ФУНКЦИЯ ДЛЯ AI ГЕНЕРАЦИИ КВЕСТОВ
+        async function generateAIQuest() {
+            const prompt = document.getElementById('ai-prompt').value.trim();
+
+            if (!prompt) {
+                showWarning('Введите описание квеста для генерации');
+                return;
+            }
+
+            // Показываем индикатор загрузки
+            const loadingElement = document.getElementById('ai-loading');
+            const generateBtn = document.getElementById('generate-btn');
+            loadingElement.style.display = 'block';
+            generateBtn.disabled = true;
+            generateBtn.textContent = '⏳ Генерация...';
+
+            try {
+                const result = await apiCall('/quests/generate', {
+                    method: 'POST',
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                if (result.success) {
+                    showSuccess('Квест успешно сгенерирован и добавлен в магазин! 🎉');
+                    // Очищаем поле ввода
+                    document.getElementById('ai-prompt').value = '';
+                    // Перезагружаем список квестов чтобы показать новый
+                    loadQuests();
+                } else {
+                    showError('Ошибка генерации квеста: ' + (result.data?.error || 'Неизвестная ошибка'));
+                }
+            } catch (error) {
+                showError('Ошибка при обращении к серверу: ' + error.message);
+            } finally {
+                // Скрываем индикатор загрузки
+                loadingElement.style.display = 'none';
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🚀 Сгенерировать квест';
+            }
+        }
+
         let token = localStorage.getItem('token');
         let currentUser = null;
         let isRegistering = false;
@@ -1496,6 +1609,9 @@
             if (tabName === 'quests') loadQuests();
             if (tabName === 'friends') loadFriends();
             if (tabName === 'my-quests') loadMyQuests();
+            if (tabName === 'ai-quests') {
+                document.getElementById('ai-quests').focus();
+            }
         }
 
         // Переключение между входом и регистрацией
@@ -1520,11 +1636,11 @@
 
         async function loadProfile() {
             const result = await apiCall('/user/profile');
-            
+
             if (result.success && result.data) {
                 const user = result.data;
                 const createdAt = new Date(user.created_at).toLocaleDateString('ru-RU');
-                
+
                 document.getElementById('profile-content').innerHTML = `
                     <div class="profile-grid">
                         <div class="profile-card">
@@ -1551,7 +1667,7 @@
                         <p>Статус: Активный игрок</p>
                     </div>
                 `;
-                
+
                 showSuccess('Профиль загружен!');
             } else {
                 showError('Ошибка загрузки профиля: ' + (result.data?.error || 'Неизвестная ошибка'));
@@ -1561,16 +1677,16 @@
         function openTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-        
+
             document.getElementById(tabName).classList.add('active');
-        
+
             const tabs = document.querySelectorAll('.tab');
             tabs.forEach((tab, index) => {
                 if (tab.textContent.toLowerCase().includes(tabName.toLowerCase())) {
                     tab.classList.add('active');
                 }
             });
-        
+
             if (tabName === 'quests') loadQuests();
             if (tabName === 'friends') loadFriends();
             if (tabName === 'my-quests') loadMyQuests();

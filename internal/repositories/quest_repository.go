@@ -18,6 +18,64 @@ func NewQuestRepository(db *sqlx.DB) *QuestRepository {
 	return &QuestRepository{db: db}
 }
 
+func (r *QuestRepository) SaveQuestToDB(quest *models.Quest, tasks []models.Task) (int, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	// Вставляем квест
+	var questID int
+	err = tx.QueryRow(`
+		INSERT INTO quests (
+			title, description, category, rarity, difficulty, price, tasks_count,
+			reward_xp, reward_coin, time_limit_hours, is_sequential
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id
+	`,
+		quest.Title, quest.Description, quest.Category, quest.Rarity,
+		quest.Difficulty, quest.Price, quest.TasksCount, quest.RewardXP,
+		quest.RewardCoin, quest.TimeLimitHours, true,
+	).Scan(&questID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Вставляем задачи
+	for _, task := range tasks {
+		var taskID int
+		err = tx.QueryRow(`
+			INSERT INTO tasks (
+				title, description, difficulty, rarity, category, 
+				base_xp_reward, base_coin_reward
+			) VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id
+		`,
+			task.Title, task.Description, task.Difficulty, task.Rarity,
+			task.Category, task.BaseXpReward, task.BaseCoinReward,
+		).Scan(&taskID)
+		if err != nil {
+			return 0, err
+		}
+
+		// Связываем задачу с квестом
+		_, err = tx.Exec(`
+			INSERT INTO quest_tasks (quest_id, task_id, task_order)
+			VALUES ($1, $2, $3)
+		`, questID, taskID, task.TaskOrder)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return questID, nil
+}
+
 // GetQuestDetails возвращает детали квеста со всеми задачами
 func (r *QuestRepository) GetQuestDetails(ctx context.Context, questID, userID int) (*models.Quest, error) {
 	// Получаем основную информацию о квесте

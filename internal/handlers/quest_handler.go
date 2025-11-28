@@ -341,5 +341,7 @@ func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService
 		questGroup.POST("/:questID/:taskID/complete", handler.CompleteTaskHandler)
 
 		questGroup.POST("/shared", handler.CreateSharedQuest)
+
+		questGroup.POST("/generate", handler.GenerateAIQuest)
 	}
 }
