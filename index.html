@@ -1326,6 +1326,31 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* голосовой ввод */
+        @keyframes bounce {
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0);
+            }
+
+            40% {
+                transform: scale(1);
+            }
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+        }
     </style>
 </head>
 
@@ -1388,15 +1413,44 @@
             <div id="quest-details" class="quest-details"></div>
         </div>
 
-        <!-- ПРОСТАЯ ВКЛАДКА: AI Генерация квестов -->
+        <!-- ВКЛАДКА: AI Генерация квестов -->
         <div id="ai-quests" class="tab-content">
             <h3>🤖 Создать квест с помощью AI</h3>
 
             <div class="simple-form">
+                <div class="voice-input-section" style="margin-bottom: 20px;">
+                    <button id="recordButton" class="btn btn-info" style="width: 100%; margin-bottom: 10px;">
+                        🎙 Начать голосовой ввод
+                    </button>
+
+                    <div id="recordingIndicator"
+                        style="display: none; text-align: center; padding: 10px; background: #fff3cd; border-radius: 8px; margin: 10px 0;">
+                        <div
+                            style="display: flex; align-items: center; justify-content: center; gap: 10px; color: #856404;">
+                            <div style="display: flex; gap: 4px;">
+                                <span
+                                    style="width: 8px; height: 8px; background: #dc3545; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out;"></span>
+                                <span
+                                    style="width: 8px; height: 8px; background: #dc3545; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; animation-delay: -0.16s;"></span>
+                                <span
+                                    style="width: 8px; height: 8px; background: #dc3545; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; animation-delay: -0.32s;"></span>
+                            </div>
+                            <strong>Запись идет... Говорите сейчас!</strong>
+                        </div>
+                    </div>
+
+                    <div id="browserError" class="error" style="display: none;">
+                        🚫 Ваш браузер не поддерживает голосовой ввод.<br>
+                        Попробуйте Chrome, Edge или Safari.
+                    </div>
+                </div>
+
                 <textarea id="ai-prompt" class="prompt-input" placeholder="🎯 Опишите, какой квест вы хотите создать...
                     Например: 'Квест для развития силы воли и физического здоровья'
                     Или: 'Интеллектуальный квест для улучшения памяти'
-                    Или: 'Социальный квест для развития коммуникативных навыков'"></textarea>
+                    Или: 'Социальный квест для развития коммуникативных навыков'
+
+                    Либо нажмите кнопку выше для голосового ввода"></textarea>
 
                 <div class="loading-spinner" id="ai-loading">
                     <div class="spinner"></div>
@@ -1547,7 +1601,149 @@
             return notificationSystem.info(message);
         }
 
-        // ПРОСТАЯ ФУНКЦИЯ ДЛЯ AI ГЕНЕРАЦИИ КВЕСТОВ
+        class VoiceInput {
+            constructor() {
+                this.isRecording = false;
+                this.recognition = null;
+                this.finalTranscript = '';
+                this.initializeRecognition();
+                this.bindEvents();
+            }
+
+            initializeRecognition() {
+                // Проверяем поддержку браузером
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    this.showBrowserError();
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SpeechRecognition();
+
+                this.recognition.continuous = true;
+                this.recognition.interimResults = true;
+                this.recognition.lang = 'ru-RU';
+
+                // Обработчики событий
+                this.recognition.onstart = () => {
+                    this.setRecordingState(true);
+                    this.finalTranscript = '';
+                    console.log('🎤 Запись началась...');
+                };
+
+                this.recognition.onresult = (event) => {
+                    let interimTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            this.finalTranscript += transcript + ' ';
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+
+                    // Обновляем текстовое поле
+                    const currentText = this.finalTranscript + interimTranscript;
+                    this.updatePromptField(currentText);
+                };
+
+                this.recognition.onerror = (event) => {
+                    console.error('Ошибка распознавания:', event.error);
+                    this.setRecordingState(false);
+
+                    if (event.error === 'not-allowed') {
+                        showError('Доступ к микрофону запрещен. Разрешите доступ в настройках браузера.');
+                    } else {
+                        showError('Ошибка распознавания: ' + event.error);
+                    }
+                };
+
+                this.recognition.onend = () => {
+                    console.log('⏹ Запись завершена');
+                    // После остановки показываем только финальный текст
+                    this.updatePromptField(this.finalTranscript.trim());
+                    this.setRecordingState(false);
+                    showSuccess('Запись завершена! Текст готов к отправке.');
+                };
+            }
+
+            bindEvents() {
+                const recordButton = document.getElementById('recordButton');
+
+                recordButton.addEventListener('click', () => {
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    } else {
+                        this.startRecording();
+                    }
+                });
+            }
+
+            startRecording() {
+                if (this.recognition && !this.isRecording) {
+                    // Очищаем поле или добавляем к существующему тексту
+                    const currentText = document.getElementById('ai-prompt').value;
+                    if (!currentText) {
+                        this.finalTranscript = '';
+                    }
+                    this.recognition.start();
+                }
+            }
+
+            stopRecording() {
+                if (this.recognition && this.isRecording) {
+                    this.recognition.stop();
+                }
+            }
+
+            setRecordingState(recording) {
+                this.isRecording = recording;
+                const recordButton = document.getElementById('recordButton');
+                const recordingIndicator = document.getElementById('recordingIndicator');
+
+                if (recording) {
+                    recordButton.innerHTML = '⏹ Остановить запись';
+                    recordButton.classList.add('btn-danger');
+                    recordButton.classList.remove('btn-info');
+                    recordingIndicator.style.display = 'block';
+                } else {
+                    recordButton.innerHTML = '🎙 Начать голосовой ввод';
+                    recordButton.classList.remove('btn-danger');
+                    recordButton.classList.add('btn-info');
+                    recordingIndicator.style.display = 'none';
+                }
+            }
+
+            updatePromptField(text) {
+                const promptField = document.getElementById('ai-prompt');
+                promptField.value = text;
+
+                // Автоматически прокручиваем к концу текста
+                promptField.scrollTop = promptField.scrollHeight;
+
+                // Фокус на поле для возможности редактирования
+                promptField.focus();
+            }
+
+            showBrowserError() {
+                const browserError = document.getElementById('browserError');
+                const recordButton = document.getElementById('recordButton');
+
+                browserError.style.display = 'block';
+                recordButton.disabled = true;
+                recordButton.style.background = '#6c757d';
+            }
+        }
+
+        // Инициализация голосового ввода при загрузке страницы
+        let voiceInput = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            voiceInput = new VoiceInput();
+        });
+
+        // ФУНКЦИЯ ДЛЯ AI ГЕНЕРАЦИИ КВЕСТОВ
         async function generateAIQuest() {
             const prompt = document.getElementById('ai-prompt').value.trim();
 
@@ -1610,7 +1806,9 @@
             if (tabName === 'friends') loadFriends();
             if (tabName === 'my-quests') loadMyQuests();
             if (tabName === 'ai-quests') {
-                document.getElementById('ai-quests').focus();
+                setTimeout(() => {
+                    document.getElementById('ai-prompt').focus();
+                }, 100);
             }
         }
 
