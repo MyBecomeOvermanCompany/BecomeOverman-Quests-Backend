@@ -1,10 +1,3 @@
-// @title BecomeOverMan API
-// @version 1.0
-// @description This is the API documentation for BecomeOverMan
-// @securityDefinitions.apikey ApiKeyAuth
-// @in header
-// @name Authorization
-// @BasePath /
 package main
 
 import (
@@ -23,13 +16,6 @@ import (
 	_ "BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/repositories"
 	"BecomeOverMan/internal/services"
-
-	_ "github.com/golang-migrate/migrate/v4/source/file" // Импорт для работы с миграциями через файлы
-
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
-
-	_ "BecomeOverMan/docs" // важно для swaggo
 )
 
 func main() {
@@ -46,21 +32,6 @@ func main() {
 	}
 	defer db.Close()
 
-	/*
-		// Настройка миграций
-		m, err := migrate.New(
-			"file://migrations", // Путь к папке с миграциями
-			os.Getenv("DATABASE_URL"),
-		)
-		if err != nil {
-			log.Fatal("Error initializing migration:", err)
-		}
-
-		// Применение миграций
-		if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-			log.Fatal("Failed to apply migrations:", err)
-		}
-	*/
 	baseRepo := repositories.NewBaseRepository(db)
 	baseService := services.NewBaseService(baseRepo)
 	baseHandler := handlers.NewBaseHandler(baseService)
@@ -79,9 +50,6 @@ func main() {
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
 	}))
-
-	// Swagger endpoint
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	{
 		r.GET("/ping", baseHandler.CheckConnection)

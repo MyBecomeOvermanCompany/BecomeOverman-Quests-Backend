@@ -28,8 +28,8 @@ type ChatResponse struct {
 	} `json:"choices"`
 }
 
-// GenerateAIQuestGo - чистая Go реализация без Python
-func GenerateAIQuestGo(userMessage string) (*models.AIQuestResponse, error) {
+// GenerateAIQuest - чистая Go реализация без Python
+func GenerateAIQuest(userMessage string) (*models.AIQuestResponse, error) {
 	apiKey := os.Getenv("API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("API_KEY not found in environment variables")

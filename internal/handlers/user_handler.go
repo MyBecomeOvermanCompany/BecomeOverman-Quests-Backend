@@ -20,17 +20,6 @@ func NewUserHandler(service *services.UserService) *UserHandler {
 	return &UserHandler{service: service}
 }
 
-// Register godoc
-// @Summary Register a new user
-// @Description Register a new user by username, email, and password
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param user body models.RegisterRequest true "User credentials"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /user/register [post]
 func (h *UserHandler) Register(c *gin.Context) {
 	var req models.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -50,17 +39,6 @@ func (h *UserHandler) Register(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
 }
 
-// Login godoc
-// @Summary Login a user
-// @Description Login with username and password, returns JWT
-// @Tags user
-// @Accept json
-// @Produce json
-// @Param user body models.LoginRequest true "User credentials"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /user/login [post]
 func (h *UserHandler) Login(c *gin.Context) {
 	var request models.LoginRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -87,18 +65,6 @@ func (h *UserHandler) Login(c *gin.Context) {
 	})
 }
 
-// AddFriend godoc
-// @Summary Add friend
-// @Description Add another user as friend
-// @Tags friends
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param friend_id path int true "Friend ID"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /friends/{friend_id} [post]
 func (h *UserHandler) AddFriend(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -120,16 +86,6 @@ func (h *UserHandler) AddFriend(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Friend added successfully"})
 }
 
-// GetFriends godoc
-// @Summary Get user's friends
-// @Description Get list of user's friends
-// @Tags friends
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Success 200 {array} models.Friend
-// @Failure 500 {object} map[string]string
-// @Router /friends [get]
 func (h *UserHandler) GetFriends(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {

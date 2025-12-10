@@ -44,17 +44,6 @@ func (h *QuestHandler) GetQuestDetails(c *gin.Context) {
 	c.JSON(http.StatusOK, questDetails)
 }
 
-// GetAvailableQuestsHandler handles the GET request for available quests
-// @Summary Get available quests for user
-// @Description Returns quests available for the current user based on their level and coin balance
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Success 200 {array} models.Quest
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/available [get]
 func (h *QuestHandler) GetAvailableQuestsHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -71,17 +60,6 @@ func (h *QuestHandler) GetAvailableQuestsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, quests)
 }
 
-// GetQuestShopHandler handles the GET request for quest shop
-// @Summary Get quest shop for user
-// @Description Returns quest shop
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Success 200 {array} models.Quest
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/shop [get]
 func (h *QuestHandler) GetQuestShopHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -98,17 +76,6 @@ func (h *QuestHandler) GetQuestShopHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, quests)
 }
 
-// GetMyActiveQuests handles the GET request for active quests
-// @Summary Get active quests for user
-// @Description Returns active quests for user
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Success 200 {array} models.Quest
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/active [get]
 func (h *QuestHandler) GetMyActiveQuestsHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -125,17 +92,6 @@ func (h *QuestHandler) GetMyActiveQuestsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, quests)
 }
 
-// GetMyCompletedQuests handles the GET request for completed quests
-// @Summary Get completed quests for user
-// @Description Returns completed quests for user
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Success 200 {array} models.Quest
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/completed [get]
 func (h *QuestHandler) GetMyCompletedQuests(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -152,18 +108,6 @@ func (h *QuestHandler) GetMyCompletedQuests(c *gin.Context) {
 	c.JSON(http.StatusOK, quests)
 }
 
-// PurchaseQuestHandler handles the POST request to purchase a quest
-// @Summary Purchase a quest
-// @Description Allows user to purchase a quest if they have enough currency
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param questID path int true "Quest ID"
-// @Success 200
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/{questID}/purchase [post]
 func (h *QuestHandler) PurchaseQuestHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -185,18 +129,6 @@ func (h *QuestHandler) PurchaseQuestHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// StartQuestHandler handles the POST request to start a quest
-// @Summary Start a purchased quest
-// @Description Begins the execution of a purchased quest
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param questID path int true "Quest ID"
-// @Success 200
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/{questID}/start [post]
 func (h *QuestHandler) StartQuestHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -218,19 +150,6 @@ func (h *QuestHandler) StartQuestHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// CompleteTaskHandler handles the POST request to complete a task
-// @Summary Complete a quest task
-// @Description Marks a specific task as completed by the user
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param questID path int true "Quest ID"
-// @Param taskID path int true "Task ID"
-// @Success 200
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/{questID}/{taskID}/complete [post]
 func (h *QuestHandler) CompleteTaskHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -258,18 +177,6 @@ func (h *QuestHandler) CompleteTaskHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// CompleteQuestHandler handles the POST request to complete a quest
-// @Summary Complete a quest
-// @Description Finalizes quest completion if all tasks are done
-// @Tags Quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param questID path int true "Quest ID"
-// @Success 200
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/{questID}/complete [post]
 func (h *QuestHandler) CompleteQuestHandler(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -290,18 +197,6 @@ func (h *QuestHandler) CompleteQuestHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// CreateSharedQuest godoc
-// @Summary Create shared quest
-// @Description Create a shared quest with a friend
-// @Tags quests
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param request body models.CreateSharedQuestRequest true "Shared quest request"
-// @Success 200 {object} map[string]string
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /quests/shared [post]
 func (h *QuestHandler) CreateSharedQuest(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
