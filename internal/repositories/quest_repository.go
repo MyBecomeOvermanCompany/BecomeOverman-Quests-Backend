@@ -2,8 +2,11 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"time"
 
@@ -21,6 +24,11 @@ func NewQuestRepository(db *sqlx.DB) *QuestRepository {
 	return &QuestRepository{db: db}
 }
 
+// GetDB возвращает подключение к БД для использования в других репозиториях
+func (r *QuestRepository) GetDB() *sqlx.DB {
+	return r.db
+}
+
 func (r *QuestRepository) SaveQuestToDB(quest *models.Quest, tasks []models.Task) (int, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -28,18 +36,20 @@ func (r *QuestRepository) SaveQuestToDB(quest *models.Quest, tasks []models.Task
 	}
 	defer tx.Rollback()
 
-	// Вставляем квест
+	// Вставляем квест (включая bonus_json, quest_level, parent_quest_id, max_level если есть)
 	var questID int
 	err = tx.QueryRow(`
 		INSERT INTO quests (
 			title, description, category, rarity, difficulty, price, tasks_count,
-			reward_xp, reward_coin, time_limit_hours, is_sequential
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			reward_xp, reward_coin, time_limit_hours, is_sequential, bonus_json,
+			quest_level, parent_quest_id, max_level
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id
 	`,
 		quest.Title, quest.Description, quest.Category, quest.Rarity,
 		quest.Difficulty, quest.Price, quest.TasksCount, quest.RewardXP,
-		quest.RewardCoin, quest.TimeLimitHours, true,
+		quest.RewardCoin, quest.TimeLimitHours, quest.IsSequential, quest.BonusJson,
+		quest.QuestLevel, quest.ParentQuestID, quest.MaxLevel,
 	).Scan(&questID)
 	if err != nil {
 		return 0, err
@@ -153,7 +163,10 @@ func (r *QuestRepository) GetQuestDetails(ctx context.Context, questID int, user
 	// Получаем основную информацию о квесте
 	var quest models.Quest
 	err := r.db.GetContext(ctx, &quest, `
-        SELECT * FROM quests WHERE id = $1
+        SELECT id, title, description, category, rarity, difficulty, price, tasks_count,
+               conditions_json, bonus_json, is_sequential, reward_xp, reward_coin, time_limit_hours,
+               COALESCE(quest_level, 1) as quest_level, parent_quest_id, COALESCE(max_level, 1) as max_level
+        FROM quests WHERE id = $1
     `, questID)
 	if err != nil {
 		return nil, err
@@ -174,7 +187,11 @@ func (r *QuestRepository) GetQuestDetails(ctx context.Context, questID int, user
 func (r *QuestRepository) GetMyAllQuestsWithDetails(ctx context.Context, userID int) ([]models.Quest, error) {
 	var quests []models.Quest
 	err := r.db.SelectContext(ctx, &quests, `
-		SELECT q.* FROM quests q
+		SELECT q.id, q.title, q.description, q.category, q.rarity, q.difficulty, 
+		       q.price, q.tasks_count, q.conditions_json, q.bonus_json, q.is_sequential,
+		       q.reward_xp, q.reward_coin, q.time_limit_hours,
+		       COALESCE(q.quest_level, 1) as quest_level, q.parent_quest_id, COALESCE(q.max_level, 1) as max_level
+		FROM quests q
 		INNER JOIN user_quests uq ON q.id = uq.quest_id
 		WHERE uq.user_id = $1
 	`, userID)
@@ -203,7 +220,10 @@ func (r *QuestRepository) SearchQuestsWithDetailsByIDs(ctx context.Context, ids 
 	}
 
 	query := `
-		SELECT * FROM quests
+		SELECT id, title, description, category, rarity, difficulty, price, tasks_count,
+		       conditions_json, bonus_json, is_sequential, reward_xp, reward_coin, time_limit_hours,
+		       COALESCE(quest_level, 1) as quest_level, parent_quest_id, COALESCE(max_level, 1) as max_level
+		FROM quests
 		WHERE id = ANY($1)
 		ORDER BY array_position($1, id)
 	` // ORDER BY array_position($1, id) нужен чтобы вернулось в порядке релевантности
@@ -249,7 +269,11 @@ func (r *QuestRepository) GetAvailableQuests(ctx context.Context, userID int) ([
 	}
 
 	query := `
-		SELECT q.* FROM quests q 
+		SELECT q.id, q.title, q.description, q.category, q.rarity, q.difficulty, 
+		       q.price, q.tasks_count, q.conditions_json, q.bonus_json, q.is_sequential,
+		       q.reward_xp, q.reward_coin, q.time_limit_hours,
+		       COALESCE(q.quest_level, 1) as quest_level, q.parent_quest_id, COALESCE(q.max_level, 1) as max_level
+		FROM quests q 
 		WHERE q.difficulty <= $1 + 1 AND q.price <= $2 AND NOT EXISTS (
 			SELECT 1 FROM user_quests uq
 			WHERE uq.quest_id = q.id AND uq.user_id = $3
@@ -268,7 +292,11 @@ func (r *QuestRepository) GetQuestShop(ctx context.Context, userID int) ([]model
 	var quests []models.Quest
 
 	query := `
-	SELECT q.* FROM quests q
+	SELECT q.id, q.title, q.description, q.category, q.rarity, q.difficulty, 
+	       q.price, q.tasks_count, q.conditions_json, q.bonus_json, q.is_sequential,
+	       q.reward_xp, q.reward_coin, q.time_limit_hours,
+	       COALESCE(q.quest_level, 1) as quest_level, q.parent_quest_id, COALESCE(q.max_level, 1) as max_level
+	FROM quests q
 	WHERE NOT EXISTS (
 		SELECT 1 FROM user_quests uq
 		WHERE uq.quest_id = q.id AND uq.user_id = $1
@@ -289,7 +317,8 @@ func (r *QuestRepository) GetMyActiveQuests(ctx context.Context, userID int) ([]
 	query := `
 		SELECT q.id, q.title, q.description, q.category, q.rarity, q.difficulty, 
 		       q.price, q.tasks_count, q.conditions_json, q.bonus_json, q.is_sequential,
-		       q.reward_xp, q.reward_coin, q.time_limit_hours
+		       q.reward_xp, q.reward_coin, q.time_limit_hours,
+		       COALESCE(q.quest_level, 1) as quest_level, q.parent_quest_id, COALESCE(q.max_level, 1) as max_level
 		FROM quests q
 		INNER JOIN user_quests uq ON q.id = uq.quest_id
 		WHERE uq.user_id = $1 AND uq.status IN ('purchased', 'started')`
@@ -307,7 +336,8 @@ func (r *QuestRepository) GetMyCompletedQuests(ctx context.Context, userID int) 
 	query := `
 	SELECT q.id, q.title, q.description, q.category, q.rarity, q.difficulty, 
 		   q.price, q.tasks_count, q.conditions_json, q.bonus_json, q.is_sequential,
-		   q.reward_xp, q.reward_coin, q.time_limit_hours
+		   q.reward_xp, q.reward_coin, q.time_limit_hours,
+		   COALESCE(q.quest_level, 1) as quest_level, q.parent_quest_id, COALESCE(q.max_level, 1) as max_level
 	FROM quests q
 	INNER JOIN user_quests uq ON q.id = uq.quest_id
 	WHERE uq.user_id = $1 AND uq.status = 'completed'`
@@ -337,7 +367,11 @@ func (r *QuestRepository) PurchaseQuest(ctx context.Context, userID, questID int
 
 	// Проверяем, что квест существует
 	var quest models.Quest
-	err = tx.GetContext(ctx, &quest, "SELECT * FROM quests WHERE id = $1", questID)
+	err = tx.GetContext(ctx, &quest, `
+		SELECT id, title, description, category, rarity, difficulty, price, tasks_count,
+		       conditions_json, bonus_json, is_sequential, reward_xp, reward_coin, time_limit_hours,
+		       COALESCE(quest_level, 1) as quest_level, parent_quest_id, COALESCE(max_level, 1) as max_level
+		FROM quests WHERE id = $1`, questID)
 	if err != nil {
 		return err
 	}
@@ -548,7 +582,7 @@ func (r *QuestRepository) CompleteTask(ctx context.Context, userID, questID, tas
 	}
 
 	// обновляем статус задачи, сохраняем награду в user_tasks
-	_, err = tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, `
         UPDATE user_tasks ut
 		SET
 			status = 'completed',
@@ -564,6 +598,16 @@ func (r *QuestRepository) CompleteTask(ctx context.Context, userID, questID, tas
 		`, userID, questID, taskID, baseXpReward, baseCoinReward)
 	if err != nil {
 		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		// Задача уже выполнена или не найдена - это не ошибка для аналитики
+		log.Printf("Task %d for user %d already completed or not found", taskID, userID)
 	}
 
 	return tx.Commit()
@@ -662,19 +706,50 @@ func (r *QuestRepository) CompleteQuest(ctx context.Context, userID, questID int
 
 // completeQuestForUsers - упрощенная версия (если сложно с динамическими IN clause)
 func (r *QuestRepository) completeQuestForUsers(tx *sqlx.Tx, ctx context.Context, userIDs []int, questID int) error {
-	// Получаем награду за квест
+	// Получаем награду за квест и bonus_json
 	var rewardXP, rewardCoin int
+	var bonusJson sql.NullString
 	err := tx.QueryRowContext(ctx, `
-        SELECT reward_xp, reward_coin FROM quests WHERE id = $1`, questID).
-		Scan(&rewardXP, &rewardCoin)
+        SELECT reward_xp, reward_coin, bonus_json FROM quests WHERE id = $1`, questID).
+		Scan(&rewardXP, &rewardCoin, &bonusJson)
 	if err != nil {
 		return err
 	}
 
 	// Для каждого пользователя выполняем операции
 	for _, userID := range userIDs {
+		// Применяем пассивные баффы для увеличения награды
+		var category string
+		tx.QueryRowContext(ctx, `SELECT category FROM quests WHERE id = $1`, questID).Scan(&category)
+		
+		// Получаем множитель награды от пассивных баффов
+		multiplier := 1.0
+		var buffs []struct {
+			BuffType string `db:"buff_type"`
+			BuffData string `db:"buff_data"`
+		}
+		tx.SelectContext(ctx, &buffs, `
+			SELECT buff_type, buff_data::text as buff_data
+			FROM user_passive_buffs
+			WHERE user_id = $1 AND is_active = TRUE AND buff_type = 'reward_multiplier'`, userID)
+		
+		for _, buff := range buffs {
+			var buffData map[string]interface{}
+			if err := json.Unmarshal([]byte(buff.BuffData), &buffData); err == nil {
+				if buffCategory, ok := buffData["category"].(string); ok && buffCategory == category {
+					if mult, ok := buffData["multiplier"].(float64); ok {
+						multiplier *= mult
+					}
+				}
+			}
+		}
+
+		// Применяем множитель
+		finalRewardXP := int(float64(rewardXP) * multiplier)
+		finalRewardCoin := int(float64(rewardCoin) * multiplier)
+
 		// Начисляем награду с автоматическим повышением уровня
-		err = r.addXPAndCoinsWithLevelUp(tx, ctx, userID, rewardXP, rewardCoin)
+		err = r.addXPAndCoinsWithLevelUp(tx, ctx, userID, finalRewardXP, finalRewardCoin)
 		if err != nil {
 			return err
 		}
@@ -685,7 +760,7 @@ func (r *QuestRepository) completeQuestForUsers(tx *sqlx.Tx, ctx context.Context
             SET status = 'completed', completed_at = NOW(),
                 xp_gained = $1, coin_gained = $2
             WHERE user_id = $3 AND quest_id = $4`,
-			rewardXP, rewardCoin, userID, questID)
+			finalRewardXP, finalRewardCoin, userID, questID)
 		if err != nil {
 			return err
 		}
@@ -701,7 +776,71 @@ func (r *QuestRepository) completeQuestForUsers(tx *sqlx.Tx, ctx context.Context
 		if err != nil {
 			return err
 		}
+
+		// Добавляем пассивный бафф если есть bonus_json
+		if bonusJson.Valid && bonusJson.String != "" && bonusJson.String != "null" {
+			_, err = tx.ExecContext(ctx, `
+				INSERT INTO user_passive_buffs (user_id, quest_id, buff_type, buff_data, is_active)
+				VALUES ($1, $2, 'reward_multiplier', $3::jsonb, TRUE)
+				ON CONFLICT (user_id, quest_id) DO UPDATE 
+				SET buff_type = EXCLUDED.buff_type, 
+					buff_data = EXCLUDED.buff_data, 
+					is_active = TRUE`,
+				userID, questID, bonusJson.String)
+			if err != nil {
+				// Логируем ошибку, но не прерываем транзакцию
+				// TODO: добавить логирование
+			}
+		}
 	}
 
 	return nil
+}
+
+// GetNextQuestLevel - получить следующий уровень квеста (если есть)
+func (r *QuestRepository) GetNextQuestLevel(ctx context.Context, completedQuestID int) (*models.Quest, error) {
+	// Получаем информацию о завершенном квесте
+	var currentQuest models.Quest
+	err := r.db.GetContext(ctx, &currentQuest, `
+		SELECT id, COALESCE(quest_level, 1) as quest_level, parent_quest_id, COALESCE(max_level, 1) as max_level
+		FROM quests WHERE id = $1
+	`, completedQuestID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Определяем parent_quest_id для поиска следующего уровня
+	var parentQuestID int
+	if currentQuest.ParentQuestID != nil {
+		parentQuestID = *currentQuest.ParentQuestID
+	} else {
+		parentQuestID = completedQuestID // Если это первый уровень, ищем по его ID
+	}
+
+	nextLevel := currentQuest.QuestLevel + 1
+
+	// Проверяем, не превышен ли максимальный уровень
+	if nextLevel > currentQuest.MaxLevel {
+		return nil, nil // Нет следующего уровня
+	}
+
+	// Ищем следующий уровень квеста
+	var nextQuest models.Quest
+	err = r.db.GetContext(ctx, &nextQuest, `
+		SELECT id, title, description, category, rarity, difficulty, price, tasks_count,
+		       conditions_json, bonus_json, is_sequential, reward_xp, reward_coin, time_limit_hours,
+		       COALESCE(quest_level, 1) as quest_level, parent_quest_id, COALESCE(max_level, 1) as max_level
+		FROM quests
+		WHERE (parent_quest_id = $1 OR (parent_quest_id IS NULL AND id = $1))
+		AND COALESCE(quest_level, 1) = $2
+	`, parentQuestID, nextLevel)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Следующий уровень не найден
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &nextQuest, nil
 }

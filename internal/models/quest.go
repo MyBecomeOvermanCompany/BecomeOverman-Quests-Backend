@@ -25,6 +25,9 @@ type Quest struct {
 	RewardXP       int              `json:"reward_xp" db:"reward_xp"`
 	RewardCoin     int              `json:"reward_coin" db:"reward_coin"`
 	TimeLimitHours int              `json:"time_limit_hours" db:"time_limit_hours"`
+	QuestLevel     int              `json:"quest_level" db:"quest_level"`           // Уровень квеста (1, 2, 3...)
+	ParentQuestID  *int             `json:"parent_quest_id" db:"parent_quest_id"`   // ID родительского квеста
+	MaxLevel       int              `json:"max_level" db:"max_level"`               // Максимальный уровень
 	Tasks          []Task           `json:"tasks,omitempty"`
 }
 
@@ -53,6 +56,27 @@ type Task struct {
 
 	XpGained   *int `json:"xp_gained" db:"xp_gained"`     // nullable
 	CoinGained *int `json:"coin_gained" db:"coin_gained"` // nullable
+}
+
+// HabitTracking - отслеживание выполнения задачи по дням
+type HabitTracking struct {
+	ID             int       `json:"id" db:"id"`
+	UserID         int       `json:"user_id" db:"user_id"`
+	QuestID        int       `json:"quest_id" db:"quest_id"`
+	TaskID         int       `json:"task_id" db:"task_id"`
+	CompletionDate time.Time `json:"completion_date" db:"completion_date"`
+	CompletionTime *string   `json:"completion_time" db:"completion_time"` // Время выполнения (HH:MM:SS)
+	IsConfirmed    bool      `json:"is_confirmed" db:"is_confirmed"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+}
+
+// TaskHabitRequirement - требования для habit tracking
+type TaskHabitRequirement struct {
+	ID             int    `json:"id" db:"id"`
+	TaskID         int    `json:"task_id" db:"task_id"`
+	ConsecutiveDays int   `json:"consecutive_days" db:"consecutive_days"` // Сколько дней подряд
+	DaytimeRequired *string `json:"daytime_required" db:"daytime_required"` // 'morning', 'afternoon', 'evening', 'any' или NULL
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
 }
 
 type UserQuests struct {

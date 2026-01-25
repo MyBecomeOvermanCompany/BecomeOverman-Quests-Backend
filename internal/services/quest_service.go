@@ -15,20 +15,41 @@ import (
 )
 
 type QuestService struct {
-	questRepo *repositories.QuestRepository
-	userRepo  *repositories.UserRepository
+	questRepo         *repositories.QuestRepository
+	questTreeRepo     *repositories.QuestTreeRepository
+	habitTrackingRepo *repositories.HabitTrackingRepository
+	userRepo          *repositories.UserRepository
 }
 
 func NewQuestService(
 	questRepo *repositories.QuestRepository,
 	userRepo *repositories.UserRepository,
 ) *QuestService {
-	return &QuestService{questRepo: questRepo, userRepo: userRepo}
+	return &QuestService{
+		questRepo:         questRepo,
+		questTreeRepo:     repositories.NewQuestTreeRepository(questRepo.GetDB()),
+		habitTrackingRepo: repositories.NewHabitTrackingRepository(questRepo.GetDB()),
+		userRepo:          userRepo,
+	}
 }
 
-// GetAvailableQuests returns quests available for the user
+// GetAvailableQuests returns quests available for the user (with tree check)
 func (s *QuestService) GetAvailableQuests(ctx context.Context, userID int) ([]models.Quest, error) {
-	return s.questRepo.GetAvailableQuests(ctx, userID)
+	// Получаем квесты с информацией о дереве
+	questsWithTree, err := s.questTreeRepo.GetAvailableQuestsWithTree(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Фильтруем только разблокированные квесты
+	availableQuests := make([]models.Quest, 0)
+	for _, qwt := range questsWithTree {
+		if qwt.IsUnlocked {
+			availableQuests = append(availableQuests, qwt.Quest)
+		}
+	}
+
+	return availableQuests, nil
 }
 
 func (s *QuestService) GetQuestShop(ctx context.Context, userID int) ([]models.Quest, error) {
@@ -47,9 +68,33 @@ func (s *QuestService) GetMyAllQuestsWithDetails(ctx context.Context, userID int
 	return s.questRepo.GetMyAllQuestsWithDetails(ctx, userID)
 }
 
+// GetDevelopmentBranches - получить все ветки развития
+func (s *QuestService) GetDevelopmentBranches(ctx context.Context) ([]models.DevelopmentBranch, error) {
+	return s.questTreeRepo.GetDevelopmentBranches(ctx)
+}
+
+// GetQuestTree - получить дерево квестов для пользователя
+func (s *QuestService) GetQuestTree(ctx context.Context, userID int) ([]models.QuestWithPrerequisites, error) {
+	return s.questTreeRepo.GetAvailableQuestsWithTree(ctx, userID)
+}
+
+// GetUserPassiveBuffs - получить пассивные баффы пользователя
+func (s *QuestService) GetUserPassiveBuffs(ctx context.Context, userID int) ([]models.PassiveBuff, error) {
+	return s.questTreeRepo.GetUserPassiveBuffs(ctx, userID)
+}
+
 // PurchaseQuest handles the purchase of a quest by a user
 func (s *QuestService) PurchaseQuest(ctx context.Context, userID, questID int) error {
-	err := s.questRepo.PurchaseQuest(ctx, userID, questID)
+	// Проверяем, разблокирован ли квест
+	isUnlocked, _, _, err := s.questTreeRepo.CheckQuestUnlocked(ctx, userID, questID)
+	if err != nil {
+		return fmt.Errorf("error checking quest unlock: %w", err)
+	}
+	if !isUnlocked {
+		return fmt.Errorf("quest is locked - complete prerequisites first")
+	}
+
+	err = s.questRepo.PurchaseQuest(ctx, userID, questID)
 	if err != nil {
 		slog.Error("Failed to purchase quest", "error", err)
 		return err
@@ -138,21 +183,50 @@ func (s *QuestService) CompleteTask(ctx context.Context, userID, questID, taskID
 	return s.questRepo.CompleteTask(ctx, userID, questID, taskID)
 }
 
+// GetQuestDetails - получает детали квеста
+func (s *QuestService) GetQuestDetails(ctx context.Context, questID, userID int) (*models.Quest, error) {
+	return s.questRepo.GetQuestDetails(ctx, questID, userID)
+}
+
 // CompleteQuest finalizes the quest completion
 func (s *QuestService) CompleteQuest(ctx context.Context, userID, questID int) error {
 	return s.questRepo.CompleteQuest(ctx, userID, questID)
 }
 
-func (s *QuestService) GetQuestDetails(ctx context.Context, questID int, userID int) (*models.Quest, error) {
-	return s.questRepo.GetQuestDetails(ctx, questID, userID)
+// GetQuestDetailsForAI - получает детали квеста для AI (без userID)
+func (s *QuestService) GetQuestDetailsForAI(ctx context.Context, questID int) (*models.Quest, error) {
+	return s.questRepo.GetQuestDetails(ctx, questID, 0)
 }
 
 func (s *QuestService) CreateSharedQuest(user1ID, user2ID, questID int) error {
 	return s.questRepo.CreateSharedQuest(user1ID, user2ID, questID)
 }
 
+func (s *QuestService) GetSharedQuests(ctx context.Context, userID int) ([]models.SharedQuest, error) {
+	return s.questRepo.GetSharedQuests(ctx, userID)
+}
+
 func (s *QuestService) SaveQuestToDB(quest *models.Quest, tasks []models.Task) (int, error) {
-	return s.questRepo.SaveQuestToDB(quest, tasks)
+	questID, err := s.questRepo.SaveQuestToDB(quest, tasks)
+	if err != nil {
+		return 0, err
+	}
+
+	// Связываем квест с ветками развития на основе category
+	if quest.Category != "" {
+		ctx := context.Background()
+		// Получаем основную ветку по категории
+		branches, _ := s.questTreeRepo.GetDevelopmentBranches(ctx)
+		for _, branch := range branches {
+			if branch.Level == 1 && branch.Name == quest.Category {
+				// Связываем с основной веткой (вес 1.0)
+				s.questTreeRepo.LinkQuestToBranch(ctx, questID, branch.ID, 1.0)
+				break
+			}
+		}
+	}
+
+	return questID, nil
 }
 
 func (s *QuestService) SearchQuests(

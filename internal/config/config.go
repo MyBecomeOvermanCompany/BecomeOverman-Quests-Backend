@@ -12,6 +12,8 @@ type Config struct {
 	JWTSecret                       string
 	TokenExpireHours                int
 	APIKeyIntelligenceIO            string
+	OpenAIAPIKey                    string
+	ClaudeAPIKey                    string
 	Recommendation_Service_BASE_URL string
 }
 
@@ -28,6 +30,8 @@ func NewConfig() Config {
 		JWTSecret:                       os.Getenv("JWT_SECRET"),
 		TokenExpireHours:                24,
 		APIKeyIntelligenceIO:            os.Getenv("API_KEY_INTELLIGENCE_IO"),
+		OpenAIAPIKey:                    os.Getenv("OPENAI_API_KEY"),
+		ClaudeAPIKey:                    os.Getenv("CLAUDE_API_KEY"),
 		Recommendation_Service_BASE_URL: "http://localhost:8000/api",
 	}
 }

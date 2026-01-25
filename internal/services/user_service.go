@@ -66,3 +66,19 @@ func (s *UserService) GetFriends(userID int) ([]models.Friend, error) {
 func (s *UserService) GetProfile(userID int) (models.User, error) {
 	return s.repo.GetProfile(userID)
 }
+
+func (s *UserService) GetFriendRequests(userID int) ([]models.Friend, error) {
+	return s.repo.GetFriendRequests(userID)
+}
+
+func (s *UserService) AcceptFriendRequest(userID, friendID int) error {
+	return s.repo.AcceptFriendRequest(userID, friendID)
+}
+
+func (s *UserService) RejectFriendRequest(userID, friendID int) error {
+	return s.repo.RejectFriendRequest(userID, friendID)
+}
+
+func (s *UserService) GetFriendStats(friendID int) (*repositories.FriendStats, error) {
+	return s.repo.GetFriendStats(friendID)
+}

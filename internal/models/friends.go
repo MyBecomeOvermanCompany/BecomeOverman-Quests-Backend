@@ -12,12 +12,15 @@ type Friend struct {
 }
 
 type SharedQuest struct {
-	ID        int       `json:"id" db:"id"`
-	QuestID   int       `json:"quest_id" db:"quest_id"`
-	User1ID   int       `json:"user1_id" db:"user1_id"`
-	User2ID   int       `json:"user2_id" db:"user2_id"`
-	Status    string    `json:"status" db:"status"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID            int       `json:"id" db:"id"`
+	QuestID       int       `json:"quest_id" db:"quest_id"`
+	User1ID       int       `json:"user1_id" db:"user1_id"`
+	User2ID       int       `json:"user2_id" db:"user2_id"`
+	Status        string    `json:"status" db:"status"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	Title         string    `json:"title,omitempty" db:"title"`
+	Description   string    `json:"description,omitempty" db:"description"`
+	FriendUsername string   `json:"friend_username,omitempty" db:"friend_username"`
 }
 
 type CreateSharedQuestRequest struct {

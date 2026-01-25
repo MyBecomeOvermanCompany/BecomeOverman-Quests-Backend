@@ -16,7 +16,8 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 }
 
 func (r *UserRepository) CreateUser(username, email, hashedPassword string) error {
-	query := `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)`
+	// Создаем пользователя с стартовым бонусом: 100 монет
+	query := `INSERT INTO users (username, email, password_hash, coin_balance) VALUES ($1, $2, $3, 100)`
 	_, err := r.db.Exec(query, username, email, hashedPassword)
 	return err
 }

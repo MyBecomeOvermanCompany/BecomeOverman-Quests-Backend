@@ -6,6 +6,7 @@ import (
 	"BecomeOverMan/pkg/middleware"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -222,6 +223,128 @@ func (h *QuestHandler) CompleteQuestHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+// ContinueQuestHandler - начать следующий уровень квеста
+func (h *QuestHandler) ContinueQuestHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	questID, err := strconv.Atoi(c.Param("questID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quest ID"})
+		return
+	}
+
+	nextQuest, err := h.questService.ContinueQuest(c.Request.Context(), userID, questID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, nextQuest)
+}
+
+// MarkTaskHabitCompleteHandler - отметить задачу как выполненную сегодня (habit)
+func (h *QuestHandler) MarkTaskHabitCompleteHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	questID, err := strconv.Atoi(c.Param("questID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quest ID"})
+		return
+	}
+
+	taskID, err := strconv.Atoi(c.Param("taskID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+
+	var req struct {
+		CompletionTime *string `json:"completion_time"` // Опционально: время выполнения (HH:MM:SS)
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Если время не указано, используем текущее время
+		now := time.Now().Format("15:04:05")
+		req.CompletionTime = &now
+	}
+
+	err = h.questService.MarkTaskHabitComplete(c.Request.Context(), userID, questID, taskID, req.CompletionTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
+// GetTaskHabitProgressHandler - получить прогресс habit tracking для задачи
+func (h *QuestHandler) GetTaskHabitProgressHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	taskID, err := strconv.Atoi(c.Param("taskID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+
+	progress, err := h.questService.GetTaskHabitProgress(c.Request.Context(), userID, taskID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": progress})
+}
+
+// FreezeMissedDayHandler - заморозить пропущенный день за монеты
+func (h *QuestHandler) FreezeMissedDayHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	questID, err := strconv.Atoi(c.Param("questID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid quest ID"})
+		return
+	}
+
+	taskID, err := strconv.Atoi(c.Param("taskID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		return
+	}
+
+	var req struct {
+		Date string `json:"date" binding:"required"` // Формат: "2006-01-02"
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err = h.questService.FreezeMissedDay(c.Request.Context(), userID, questID, taskID, req.Date)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Day frozen successfully"})
+}
+
 func (h *QuestHandler) CreateSharedQuest(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
@@ -241,6 +364,23 @@ func (h *QuestHandler) CreateSharedQuest(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Shared quest created successfully"})
+}
+
+// GetSharedQuestsHandler - получить совместные квесты пользователя
+func (h *QuestHandler) GetSharedQuestsHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	sharedQuests, err := h.questService.GetSharedQuests(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": sharedQuests})
 }
 
 // Search relevant quests by title / description (поисковик - интеграция с Bert FastAPI-микросервисом)
@@ -306,6 +446,51 @@ func (h *QuestHandler) RecommendQuests(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetQuestTreeHandler - получить дерево квестов с зависимостями
+func (h *QuestHandler) GetQuestTreeHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	tree, err := h.questService.GetQuestTree(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, tree)
+}
+
+// GetDevelopmentBranchesHandler - получить все ветки развития
+func (h *QuestHandler) GetDevelopmentBranchesHandler(c *gin.Context) {
+	branches, err := h.questService.GetDevelopmentBranches(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, branches)
+}
+
+// GetUserPassiveBuffsHandler - получить пассивные баффы пользователя
+func (h *QuestHandler) GetUserPassiveBuffsHandler(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	buffs, err := h.questService.GetUserPassiveBuffs(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, buffs)
+}
+
 // RegisterQuestRoutes sets up the routes for quest handling with Gin
 func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService) {
 	handler := NewQuestHandler(questService)
@@ -325,6 +510,7 @@ func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService
 		questGroup.POST("/:questID/complete", handler.CompleteQuestHandler)
 		questGroup.POST("/:questID/:taskID/complete", handler.CompleteTaskHandler)
 
+		questGroup.GET("/shared", handler.GetSharedQuestsHandler)
 		questGroup.POST("/shared", handler.CreateSharedQuest)
 
 		questGroup.POST("/generate", handler.GenerateAIQuest)
@@ -334,5 +520,27 @@ func RegisterQuestRoutes(router *gin.Engine, questService *services.QuestService
 		questGroup.POST("/search", handler.SearchQuests)
 		questGroup.POST("/recommend/friends", handler.RecommendFriends)
 		questGroup.POST("/recommend", handler.RecommendQuests)
+
+		// New endpoints for quest tree system
+		questGroup.GET("/tree", handler.GetQuestTreeHandler)
+		questGroup.GET("/buffs", handler.GetUserPassiveBuffsHandler)
+
+		// Habit tracking and quest levels
+		questGroup.POST("/:questID/continue", handler.ContinueQuestHandler)
+		questGroup.POST("/:questID/:taskID/habit-complete", handler.MarkTaskHabitCompleteHandler)
+		questGroup.GET("/:questID/:taskID/habit-progress", handler.GetTaskHabitProgressHandler)
+		questGroup.POST("/:questID/:taskID/freeze-day", handler.FreezeMissedDayHandler)
+
+		// Enhanced AI features
+		questGroup.POST("/ai/motivate", handler.GenerateMotivationHandler)
+		questGroup.POST("/ai/analyze-progress", handler.AnalyzeProgressHandler)
+		questGroup.POST("/ai/improve-quest", handler.ImproveQuestDescriptionHandler)
+		questGroup.POST("/ai/personalized-quest", handler.GeneratePersonalizedQuestHandler)
+	}
+
+	// Public endpoint for branches (no auth required)
+	branchesGroup := router.Group("/branches")
+	{
+		branchesGroup.GET("", handler.GetDevelopmentBranchesHandler)
 	}
 }

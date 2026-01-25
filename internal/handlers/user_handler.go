@@ -120,7 +120,7 @@ func (h *UserHandler) GetFriends(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, friends)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": friends})
 }
 
 func (h *UserHandler) GetProfile(c *gin.Context) {
@@ -137,6 +137,80 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, profile)
+}
+
+func (h *UserHandler) GetFriendRequests(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	requests, err := h.service.GetFriendRequests(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": requests})
+}
+
+func (h *UserHandler) AcceptFriendRequest(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	friendID, err := strconv.Atoi(c.Param("friend_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid friend ID"})
+		return
+	}
+
+	if err := h.service.AcceptFriendRequest(userID, friendID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Friend request accepted"})
+}
+
+func (h *UserHandler) RejectFriendRequest(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	friendID, err := strconv.Atoi(c.Param("friend_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid friend ID"})
+		return
+	}
+
+	if err := h.service.RejectFriendRequest(userID, friendID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Friend request rejected"})
+}
+
+func (h *UserHandler) GetFriendStats(c *gin.Context) {
+	friendID, err := strconv.Atoi(c.Param("friend_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid friend ID"})
+		return
+	}
+
+	stats, err := h.service.GetFriendStats(friendID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
 }
 
 // RegisterUserRoutes sets up the routes for user handling with Gin
@@ -161,5 +235,9 @@ func RegisterUserRoutes(router *gin.Engine, userService *services.UserService) {
 		friendGroup.POST("/:friend_id", handler.AddFriend)
 		friendGroup.POST("/by-name/:friend_name", handler.AddFriendByName)
 		friendGroup.GET("", handler.GetFriends)
+		friendGroup.GET("/requests", handler.GetFriendRequests)
+		friendGroup.POST("/:friend_id/accept", handler.AcceptFriendRequest)
+		friendGroup.POST("/:friend_id/reject", handler.RejectFriendRequest)
+		friendGroup.GET("/:friend_id/stats", handler.GetFriendStats)
 	}
 }
