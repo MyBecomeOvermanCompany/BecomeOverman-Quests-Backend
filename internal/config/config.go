@@ -12,7 +12,15 @@ type Config struct {
 	JWTSecret                       string
 	TokenExpireHours                int
 	APIKeyIntelligenceIO            string
-	Recommendation_Service_BASE_URL string
+	Recommendation_Service_BASE_URL string // Legacy HTTP endpoint (deprecated)
+	RecommendationGRPCAddress       string // gRPC server address
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func NewConfig() Config {
@@ -29,6 +37,7 @@ func NewConfig() Config {
 		TokenExpireHours:                24,
 		APIKeyIntelligenceIO:            os.Getenv("API_KEY_INTELLIGENCE_IO"),
 		Recommendation_Service_BASE_URL: "http://localhost:8000/api",
+		RecommendationGRPCAddress:       getEnvOrDefault("RECOMMENDATION_GRPC_ADDRESS", "localhost:50051"),
 	}
 }
 

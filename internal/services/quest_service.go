@@ -1,29 +1,32 @@
 package services
 
 import (
-	"BecomeOverMan/internal/integrations"
 	"BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/repositories"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"slices"
-	"time"
+
+	grpcclient "BecomeOverMan/internal/grpc"
 )
 
 type QuestService struct {
-	questRepo *repositories.QuestRepository
-	userRepo  *repositories.UserRepository
+	questRepo  *repositories.QuestRepository
+	userRepo   *repositories.UserRepository
+	grpcClient *grpcclient.RecommendationClient
 }
 
 func NewQuestService(
 	questRepo *repositories.QuestRepository,
 	userRepo *repositories.UserRepository,
+	grpcClient *grpcclient.RecommendationClient,
 ) *QuestService {
-	return &QuestService{questRepo: questRepo, userRepo: userRepo}
+	return &QuestService{
+		questRepo:  questRepo,
+		userRepo:   userRepo,
+		grpcClient: grpcClient,
+	}
 }
 
 // GetAvailableQuests returns quests available for the user
@@ -91,40 +94,19 @@ func (s *QuestService) getUserQuestIDs(userID int) ([]int, error) {
 }
 
 func (s *QuestService) sendUserQuestToRecommendationService(req models.RecommendationService_AddUsers_Request) (map[string]any, error) {
-	// 1. Создаем URL
-	url := integrations.Recommendation_Service_BASE_URL + "/users/add"
+	if s.grpcClient == nil {
+		return nil, fmt.Errorf("gRPC client is not initialized")
+	}
 
-	// 2. Кодируем в JSON
-	jsonData, err := json.Marshal(req)
+	ctx := context.Background()
+	err := s.grpcClient.AddUsers(ctx, &req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error calling gRPC AddUsers: %v", err)
 	}
 
-	// 3. Создаем io.Reader из JSON
-	body := bytes.NewBuffer(jsonData)
-
-	// 4. Делаем POST запрос с таймаутом
-	client := &http.Client{
-		Timeout: 30 * time.Second,
+	response := map[string]any{
+		"status": "success",
 	}
-	resp, err := client.Post(url, "application/json", body)
-	if err != nil {
-		return nil, fmt.Errorf("error making POST request to recommendation service: %v", err)
-	}
-
-	defer resp.Body.Close()
-
-	// 5. Проверяем статус
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("recommendation service returned status %d", resp.StatusCode)
-	}
-
-	// 6. Читаем и парсим ответ
-	var response map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
 	return response, nil
 }
 
@@ -160,41 +142,17 @@ func (s *QuestService) SearchQuests(
 	req models.RecommendationService_SearchQuest_Request,
 	userID int,
 ) (models.SearchQuestsResponse, error) {
-	// 1. Создаем URL
-	url := integrations.Recommendation_Service_BASE_URL + "/search"
+	if s.grpcClient == nil {
+		return nil, fmt.Errorf("gRPC client is not initialized")
+	}
 
-	// 2. Кодируем в JSON
-	jsonData, err := json.Marshal(req)
+	// Call gRPC service
+	response, err := s.grpcClient.SearchQuests(ctx, &req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error calling gRPC SearchQuests: %v", err)
 	}
 
-	// 3. Создаем io.Reader из JSON
-	body := bytes.NewBuffer(jsonData)
-
-	// 4. Делаем POST запрос с таймаутом
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Post(url, "application/json", body)
-	if err != nil {
-		return nil, fmt.Errorf("error making POST request to recommendation service: %v", err)
-	}
-
-	defer resp.Body.Close()
-
-	// 5. Проверяем статус
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("recommendation service returned status %d", resp.StatusCode)
-	}
-
-	// 6. Читаем и парсим ответ
-	var response models.RecommendationService_SearchQuests_Response
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// 7. достаем ids
+	// Extract quest IDs
 	questsIDS := make([]int, len(response.Results))
 	for i, result := range response.Results {
 		questsIDS[i] = result.ID
@@ -202,7 +160,7 @@ func (s *QuestService) SearchQuests(
 
 	var questsWithDetails []models.Quest
 
-	// 8. Достаем квесты с деталями из БД (тут сразу и те что есть у юзера и те что еще не куплены)
+	// Get quests with details from DB
 	questsWithDetails, err = s.questRepo.SearchQuestsWithDetailsByIDs(ctx, questsIDS)
 	if err != nil {
 		slog.ErrorContext(ctx, "ошибка получения квестов из БД с указанными ids во время поиска",
@@ -212,8 +170,8 @@ func (s *QuestService) SearchQuests(
 		return nil, fmt.Errorf("В поиске квестов по запросу произошла внутренняя ошибка: %w", err)
 	}
 
-	// 9. Возвращаем результат = []struct{questWithDetails, SimilaryScore}
-	questsWithDetailsAndSimilarityResponse := models.NewSearchQuestsResponse(questsWithDetails, response)
+	// Return result
+	questsWithDetailsAndSimilarityResponse := models.NewSearchQuestsResponse(questsWithDetails, *response)
 
 	return questsWithDetailsAndSimilarityResponse, nil
 }
@@ -222,41 +180,17 @@ func (s *QuestService) RecommendFriends(
 	ctx context.Context,
 	req models.RecommendationService_RecommendUsers_Request,
 ) ([]models.UserProfileWithSimilarityScore, error) {
-	// 1. Создаем URL
-	url := integrations.Recommendation_Service_BASE_URL + "/users/recommend"
+	if s.grpcClient == nil {
+		return nil, fmt.Errorf("gRPC client is not initialized")
+	}
 
-	// 2. Кодируем в JSON
-	jsonData, err := json.Marshal(req)
+	// Call gRPC service
+	response, err := s.grpcClient.RecommendUsers(ctx, &req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error calling gRPC RecommendUsers: %v", err)
 	}
 
-	// 3. Создаем io.Reader из JSON
-	body := bytes.NewBuffer(jsonData)
-
-	// 4. Делаем POST запрос с таймаутом
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Post(url, "application/json", body)
-	if err != nil {
-		return nil, fmt.Errorf("error making POST request to recommendation service: %v", err)
-	}
-
-	defer resp.Body.Close()
-
-	// 5. Проверяем статус
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("recommendation service returned status %d", resp.StatusCode)
-	}
-
-	// 6. Читаем и парсим ответ
-	var response models.RecommendationService_RecommendUsers_Response
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// 7. достаем ids
+	// Extract user IDs
 	userIDs := make([]int, len(response.Results))
 	userIDsWithSimilarityScore := make(map[int]float64, len(response.Results))
 	explanations := make(map[int]map[string]any, len(response.Results))
@@ -266,7 +200,7 @@ func (s *QuestService) RecommendFriends(
 		explanations[result.UserID] = result.Explanation
 	}
 
-	// 8. Достаем профили потенциальных друзей (кроме пользователей с которыми уже дружба)
+	// Get recommended profiles (excluding existing friends)
 	recommendedProfiles, err := s.userRepo.GetProfiles(userIDs)
 	if err != nil {
 		slog.ErrorContext(ctx, "ошибка получения профилей из БД с указанными ids во время рекомендации друзей",
@@ -276,7 +210,7 @@ func (s *QuestService) RecommendFriends(
 		return nil, fmt.Errorf("В рекомендации друзей по запросу произошла внутренняя ошибка: %w", err)
 	}
 
-	// 9. Убираем оттуда пользователей с которыми уже дружба
+	// Exclude users who are already friends
 	friendsIDS, err := s.userRepo.GetAllAcceptedFriends(req.UserID)
 	if err != nil {
 		slog.ErrorContext(ctx, "ошибка получения друзей из БД с указанными ids во время рекомендации друзей",
@@ -293,7 +227,7 @@ func (s *QuestService) RecommendFriends(
 		}
 	}
 
-	// 10. Возвращаем результат = []models.UserProfileWithSimilarityScore
+	// Return result
 	recommendedProfilesAndSimilarityResponse := make([]models.UserProfileWithSimilarityScore, 0, len(recommendedNotFriendsProfiles))
 	for _, profile := range recommendedNotFriendsProfiles {
 		recommendedProfilesAndSimilarityResponse = append(recommendedProfilesAndSimilarityResponse, models.UserProfileWithSimilarityScore{
@@ -325,39 +259,15 @@ func (s *QuestService) RecommendQuests(ctx context.Context, userID int) (*models
 }
 
 func (s *QuestService) recommendQuests(ctx context.Context, req models.RecommendationService_RecommendQuests_Req) (*models.RecommendationService_RecommendQuests_Resp, error) {
-	// 1. Создаем URL
-	url := integrations.Recommendation_Service_BASE_URL + "/quests/recommend"
+	if s.grpcClient == nil {
+		return nil, fmt.Errorf("gRPC client is not initialized")
+	}
 
-	// 2. Кодируем в JSON
-	jsonData, err := json.Marshal(req)
+	// Call gRPC service
+	response, err := s.grpcClient.RecommendQuests(ctx, &req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error calling gRPC RecommendQuests: %v", err)
 	}
 
-	// 3. Создаем io.Reader из JSON
-	body := bytes.NewBuffer(jsonData)
-
-	// 4. Делаем POST запрос с таймаутом
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	resp, err := client.Post(url, "application/json", body)
-	if err != nil {
-		return nil, fmt.Errorf("error making POST request to recommendation service: %v", err)
-	}
-
-	defer resp.Body.Close()
-
-	// 5. Проверяем статус
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("recommendation service returned status %d", resp.StatusCode)
-	}
-
-	// 6. Читаем и парсим ответ
-	var response models.RecommendationService_RecommendQuests_Resp
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	return &response, nil
+	return response, nil
 }

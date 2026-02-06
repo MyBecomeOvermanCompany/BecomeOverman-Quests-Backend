@@ -6,6 +6,28 @@
 *.dylib
 *.a
 *.out
+main
+
+# Generated protobuf files (Go)
+*.pb.go
+*_grpc.pb.go
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Generated protobuf files (Python)
+*_pb2.py
+*_pb2_grpc.py
 
 # Node modules (если проект включает фронтенд)
 node_modules/
@@ -16,9 +38,15 @@ node_modules/
 # Файлы IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
-# Файлы конфигурации
+# Файлы конфигурации (ВАЖНО!)
 .env
+*.env
+.env.*
+!.env.example
 
 # Логи
 *.log
@@ -32,3 +60,8 @@ Desktop.ini
 
 # Файлы для macOS
 .DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+tmp/

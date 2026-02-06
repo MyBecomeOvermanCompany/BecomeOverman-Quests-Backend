@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 
 	"BecomeOverMan/internal/config"
+	grpcclient "BecomeOverMan/internal/grpc"
 	_ "BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/repositories"
 	"BecomeOverMan/internal/services"
@@ -27,6 +28,17 @@ func main() {
 	}
 	defer db.Close()
 
+	// Initialize gRPC client for recommendation service
+	grpcClient, err := grpcclient.NewRecommendationClient(config.Cfg.RecommendationGRPCAddress)
+	if err != nil {
+		log.Printf("⚠️  Warning: Failed to connect to recommendation gRPC service: %v", err)
+		log.Printf("   Recommendation features will not be available")
+		// Don't exit - allow the app to run without recommendations
+	} else {
+		defer grpcClient.Close()
+		log.Println("✓ Recommendation gRPC client initialized")
+	}
+
 	techRepo := repositories.NewTechRepository(db)
 	techService := services.NewTechService(techRepo)
 
@@ -34,7 +46,7 @@ func main() {
 	userService := services.NewUserService(userRepo)
 
 	questRepo := repositories.NewQuestRepository(db)
-	questService := services.NewQuestService(questRepo, userRepo)
+	questService := services.NewQuestService(questRepo, userRepo, grpcClient)
 
 	r := gin.Default()
 	// Настройка CORS
