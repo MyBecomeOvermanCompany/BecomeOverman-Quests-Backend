@@ -2,6 +2,7 @@ package main
 
 import (
 	"BecomeOverMan/internal/handlers"
+	"BecomeOverMan/internal/integrations"
 	"log"
 	"log/slog"
 
@@ -13,7 +14,6 @@ import (
 	_ "github.com/lib/pq"
 
 	"BecomeOverMan/internal/config"
-	grpcclient "BecomeOverMan/internal/grpc"
 	_ "BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/repositories"
 	"BecomeOverMan/internal/services"
@@ -28,15 +28,13 @@ func main() {
 	}
 	defer db.Close()
 
-	// Initialize gRPC client for recommendation service
-	grpcClient, err := grpcclient.NewRecommendationClient(config.Cfg.RecommendationGRPCAddress)
+	// gRPC-клиент для сервиса рекомендаций
+	grpcClient, err := integrations.NewRecommendationGRPCClient(config.Cfg.GRPCRecommendationAddr)
 	if err != nil {
-		log.Printf("⚠️  Warning: Failed to connect to recommendation gRPC service: %v", err)
-		log.Printf("   Recommendation features will not be available")
-		// Don't exit - allow the app to run without recommendations
-	} else {
+		slog.Warn("Failed to connect to recommendation gRPC service, some features will be unavailable", "error", err)
+	}
+	if grpcClient != nil {
 		defer grpcClient.Close()
-		log.Println("✓ Recommendation gRPC client initialized")
 	}
 
 	techRepo := repositories.NewTechRepository(db)
@@ -58,7 +56,7 @@ func main() {
 	}))
 
 	{
-		handlers.RegisterTechRoutes(r, techService)
+		handlers.RegisterTechRoutes(r, techService, grpcClient)
 
 		handlers.RegisterUserRoutes(r, userService)
 		handlers.RegisterQuestRoutes(r, questService)

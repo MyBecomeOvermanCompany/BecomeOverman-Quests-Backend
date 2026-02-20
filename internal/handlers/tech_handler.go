@@ -3,8 +3,7 @@ package handlers
 import (
 	"BecomeOverMan/internal/integrations"
 	"BecomeOverMan/internal/services"
-	"encoding/json"
-	"io"
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -12,11 +11,12 @@ import (
 )
 
 type TechHandler struct {
-	service *services.TechService
+	service    *services.TechService
+	grpcClient *integrations.RecommendationGRPCClient
 }
 
-func NewTechHandler(service *services.TechService) *TechHandler {
-	return &TechHandler{service: service}
+func NewTechHandler(service *services.TechService, grpcClient *integrations.RecommendationGRPCClient) *TechHandler {
+	return &TechHandler{service: service, grpcClient: grpcClient}
 }
 
 func (h *TechHandler) CheckConnectionDB(c *gin.Context) {
@@ -28,39 +28,27 @@ func (h *TechHandler) CheckConnectionDB(c *gin.Context) {
 }
 
 func (h *TechHandler) RecommendationServiceHealth(c *gin.Context) {
-	url := integrations.Recommendation_Service_BASE_URL + "/health"
-
-	resp, err := http.Get(url)
+	// gRPC health check вместо HTTP
+	resp, err := h.grpcClient.HealthCheck(context.Background())
 	if err != nil {
-		slog.Error("Failed to make request to recommendation service", "error", err)
+		slog.Error("Failed to check recommendation service health via gRPC", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Cannot connect to recommendation service",
 			"details": err.Error(),
 		})
 		return
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response body: " + err.Error()})
-		return
-	}
-
-	slog.Debug("Response body", "body", string(body))
-
-	// Парсим JSON ответ
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(resp.StatusCode, result)
+	c.JSON(http.StatusOK, gin.H{
+		"status":       resp.Status,
+		"model":        resp.Model,
+		"device":       resp.Device,
+		"quests_count": resp.QuestsCount,
+	})
 }
 
-func RegisterTechRoutes(router *gin.Engine, techService *services.TechService) {
-	handler := NewTechHandler(techService)
+func RegisterTechRoutes(router *gin.Engine, techService *services.TechService, grpcClient *integrations.RecommendationGRPCClient) {
+	handler := NewTechHandler(techService, grpcClient)
 
 	g := router.Group("/tech")
 	{

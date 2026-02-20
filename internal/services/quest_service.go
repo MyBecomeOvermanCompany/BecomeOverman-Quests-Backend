@@ -1,6 +1,7 @@
 package services
 
 import (
+	"BecomeOverMan/internal/integrations"
 	"BecomeOverMan/internal/models"
 	"BecomeOverMan/internal/repositories"
 	"context"
@@ -8,25 +9,21 @@ import (
 	"log/slog"
 	"slices"
 
-	grpcclient "BecomeOverMan/internal/grpc"
+	pb "BecomeOverMan/internal/generated/recommendation"
 )
 
 type QuestService struct {
 	questRepo  *repositories.QuestRepository
 	userRepo   *repositories.UserRepository
-	grpcClient *grpcclient.RecommendationClient
+	grpcClient *integrations.RecommendationGRPCClient
 }
 
 func NewQuestService(
 	questRepo *repositories.QuestRepository,
 	userRepo *repositories.UserRepository,
-	grpcClient *grpcclient.RecommendationClient,
+	grpcClient *integrations.RecommendationGRPCClient,
 ) *QuestService {
-	return &QuestService{
-		questRepo:  questRepo,
-		userRepo:   userRepo,
-		grpcClient: grpcClient,
-	}
+	return &QuestService{questRepo: questRepo, userRepo: userRepo, grpcClient: grpcClient}
 }
 
 // GetAvailableQuests returns quests available for the user
@@ -69,21 +66,24 @@ func (s *QuestService) PurchaseQuest(ctx context.Context, userID, questID int) e
 			slog.Info("User has no quests", "user_id", userID)
 		}
 
-		req := models.RecommendationService_AddUsers_Request{
-			Users: []models.UserWithQuestIDS{
-				{
-					UserID:   userID,
-					QuestIDs: questIDS,
-				},
+		// gRPC вызов вместо HTTP
+		questIDsInt32 := make([]int32, len(questIDS))
+		for i, id := range questIDS {
+			questIDsInt32[i] = int32(id)
+		}
+
+		response, err := s.grpcClient.AddUsers(context.Background(), []*pb.UserWithQuestIDs{
+			{
+				UserId:   int32(userID),
+				QuestIds: questIDsInt32,
 			},
-		}
-
-		response, err := s.sendUserQuestToRecommendationService(req)
+		})
 		if err != nil {
-			slog.Error("Failed to send user quest to recommendation service", "error", err, "user_id", userID)
+			slog.Error("Failed to send user quest to recommendation service via gRPC", "error", err, "user_id", userID)
+			return
 		}
 
-		slog.Info("User quest sent to recommendation service", "user_id", userID, "response", response)
+		slog.Info("User quest sent to recommendation service via gRPC", "user_id", userID, "response_status", response.Status)
 	}()
 
 	return nil
@@ -91,23 +91,6 @@ func (s *QuestService) PurchaseQuest(ctx context.Context, userID, questID int) e
 
 func (s *QuestService) getUserQuestIDs(userID int) ([]int, error) {
 	return s.questRepo.GetUserQuestIDs(userID)
-}
-
-func (s *QuestService) sendUserQuestToRecommendationService(req models.RecommendationService_AddUsers_Request) (map[string]any, error) {
-	if s.grpcClient == nil {
-		return nil, fmt.Errorf("gRPC client is not initialized")
-	}
-
-	ctx := context.Background()
-	err := s.grpcClient.AddUsers(ctx, &req)
-	if err != nil {
-		return nil, fmt.Errorf("error calling gRPC AddUsers: %v", err)
-	}
-
-	response := map[string]any{
-		"status": "success",
-	}
-	return response, nil
 }
 
 // StartQuest begins the execution of a purchased quest
@@ -142,17 +125,27 @@ func (s *QuestService) SearchQuests(
 	req models.RecommendationService_SearchQuest_Request,
 	userID int,
 ) (models.SearchQuestsResponse, error) {
-	if s.grpcClient == nil {
-		return nil, fmt.Errorf("gRPC client is not initialized")
-	}
-
-	// Call gRPC service
-	response, err := s.grpcClient.SearchQuests(ctx, &req)
+	// gRPC вызов вместо HTTP
+	grpcResp, err := s.grpcClient.SearchQuests(ctx, req.Query, int32(req.TopK), req.Category)
 	if err != nil {
-		return nil, fmt.Errorf("error calling gRPC SearchQuests: %v", err)
+		return nil, fmt.Errorf("gRPC SearchQuests error: %w", err)
 	}
 
-	// Extract quest IDs
+	// Конвертируем gRPC ответ в существующую модель
+	response := models.RecommendationService_SearchQuests_Response{
+		Results: make([]models.RecommendationService_SearchQuest_Result, len(grpcResp.Results)),
+	}
+	for i, r := range grpcResp.Results {
+		response.Results[i] = models.RecommendationService_SearchQuest_Result{
+			ID:              int(r.Id),
+			Title:           r.Title,
+			Description:     r.Description,
+			Category:        r.Category,
+			SimilarityScore: r.SimilarityScore,
+		}
+	}
+
+	// Достаем IDs
 	questsIDS := make([]int, len(response.Results))
 	for i, result := range response.Results {
 		questsIDS[i] = result.ID
@@ -160,7 +153,7 @@ func (s *QuestService) SearchQuests(
 
 	var questsWithDetails []models.Quest
 
-	// Get quests with details from DB
+	// Достаем квесты с деталями из БД
 	questsWithDetails, err = s.questRepo.SearchQuestsWithDetailsByIDs(ctx, questsIDS)
 	if err != nil {
 		slog.ErrorContext(ctx, "ошибка получения квестов из БД с указанными ids во время поиска",
@@ -170,9 +163,8 @@ func (s *QuestService) SearchQuests(
 		return nil, fmt.Errorf("В поиске квестов по запросу произошла внутренняя ошибка: %w", err)
 	}
 
-	// Return result
-	questsWithDetailsAndSimilarityResponse := models.NewSearchQuestsResponse(questsWithDetails, *response)
-
+	// Возвращаем результат
+	questsWithDetailsAndSimilarityResponse := models.NewSearchQuestsResponse(questsWithDetails, response)
 	return questsWithDetailsAndSimilarityResponse, nil
 }
 
@@ -180,27 +172,42 @@ func (s *QuestService) RecommendFriends(
 	ctx context.Context,
 	req models.RecommendationService_RecommendUsers_Request,
 ) ([]models.UserProfileWithSimilarityScore, error) {
-	if s.grpcClient == nil {
-		return nil, fmt.Errorf("gRPC client is not initialized")
-	}
-
-	// Call gRPC service
-	response, err := s.grpcClient.RecommendUsers(ctx, &req)
+	// gRPC вызов вместо HTTP
+	grpcResp, err := s.grpcClient.RecommendUsers(ctx, int32(req.UserID), int32(req.TopK))
 	if err != nil {
-		return nil, fmt.Errorf("error calling gRPC RecommendUsers: %v", err)
+		return nil, fmt.Errorf("gRPC RecommendUsers error: %w", err)
 	}
 
-	// Extract user IDs
-	userIDs := make([]int, len(response.Results))
-	userIDsWithSimilarityScore := make(map[int]float64, len(response.Results))
-	explanations := make(map[int]map[string]any, len(response.Results))
-	for i, result := range response.Results {
-		userIDs[i] = result.UserID
-		userIDsWithSimilarityScore[result.UserID] = result.SimilarityScore
-		explanations[result.UserID] = result.Explanation
+	// Достаем IDs и scores
+	userIDs := make([]int, len(grpcResp.Results))
+	userIDsWithSimilarityScore := make(map[int]float64, len(grpcResp.Results))
+	explanations := make(map[int]map[string]any, len(grpcResp.Results))
+	for i, result := range grpcResp.Results {
+		uid := int(result.UserId)
+		userIDs[i] = uid
+		userIDsWithSimilarityScore[uid] = result.SimilarityScore
+
+		// Конвертируем proto explanation в map[string]any
+		explanation := make(map[string]any)
+		if result.Explanation != nil {
+			explanation["summary"] = result.Explanation.Summary
+			if result.Explanation.Details != nil {
+				details := make(map[string]any)
+				details["common_quests_count"] = result.Explanation.Details.CommonQuestsCount
+				details["common_quests_ids"] = result.Explanation.Details.CommonQuestsIds
+				details["common_categories"] = result.Explanation.Details.CommonCategories
+				details["user_categories_top"] = result.Explanation.Details.UserCategoriesTop
+				details["other_user_categories_top"] = result.Explanation.Details.OtherUserCategoriesTop
+				details["user_quests_count"] = result.Explanation.Details.UserQuestsCount
+				details["other_user_quests_count"] = result.Explanation.Details.OtherUserQuestsCount
+				details["similarity_level"] = result.Explanation.Details.SimilarityLevel
+				explanation["details"] = details
+			}
+		}
+		explanations[uid] = explanation
 	}
 
-	// Get recommended profiles (excluding existing friends)
+	// Достаем профили потенциальных друзей
 	recommendedProfiles, err := s.userRepo.GetProfiles(userIDs)
 	if err != nil {
 		slog.ErrorContext(ctx, "ошибка получения профилей из БД с указанными ids во время рекомендации друзей",
@@ -210,7 +217,7 @@ func (s *QuestService) RecommendFriends(
 		return nil, fmt.Errorf("В рекомендации друзей по запросу произошла внутренняя ошибка: %w", err)
 	}
 
-	// Exclude users who are already friends
+	// Убираем оттуда пользователей с которыми уже дружба
 	friendsIDS, err := s.userRepo.GetAllAcceptedFriends(req.UserID)
 	if err != nil {
 		slog.ErrorContext(ctx, "ошибка получения друзей из БД с указанными ids во время рекомендации друзей",
@@ -227,7 +234,7 @@ func (s *QuestService) RecommendFriends(
 		}
 	}
 
-	// Return result
+	// Возвращаем результат
 	recommendedProfilesAndSimilarityResponse := make([]models.UserProfileWithSimilarityScore, 0, len(recommendedNotFriendsProfiles))
 	for _, profile := range recommendedNotFriendsProfiles {
 		recommendedProfilesAndSimilarityResponse = append(recommendedProfilesAndSimilarityResponse, models.UserProfileWithSimilarityScore{
@@ -251,23 +258,42 @@ func (s *QuestService) RecommendQuests(ctx context.Context, userID int) (*models
 		return &models.RecommendationService_RecommendQuests_Resp{}, nil
 	}
 
-	req := models.RecommendationService_RecommendQuests_Req{
-		UserQuestIDs: questIDS,
+	// Конвертируем []int -> []int32
+	questIDsInt32 := make([]int32, len(questIDS))
+	for i, id := range questIDS {
+		questIDsInt32[i] = int32(id)
 	}
 
-	return s.recommendQuests(ctx, req)
-}
-
-func (s *QuestService) recommendQuests(ctx context.Context, req models.RecommendationService_RecommendQuests_Req) (*models.RecommendationService_RecommendQuests_Resp, error) {
-	if s.grpcClient == nil {
-		return nil, fmt.Errorf("gRPC client is not initialized")
-	}
-
-	// Call gRPC service
-	response, err := s.grpcClient.RecommendQuests(ctx, &req)
+	// gRPC вызов
+	grpcResp, err := s.grpcClient.RecommendQuests(ctx, questIDsInt32, 0, "")
 	if err != nil {
-		return nil, fmt.Errorf("error calling gRPC RecommendQuests: %v", err)
+		return nil, fmt.Errorf("gRPC RecommendQuests error: %w", err)
 	}
 
-	return response, nil
+	// Конвертируем gRPC ответ в существующую модель
+	recommendations := make([]models.RecommendQuests_Result, len(grpcResp.Recommendations))
+	for i, r := range grpcResp.Recommendations {
+		recommendations[i] = models.RecommendQuests_Result{
+			RecommendationService_questToAdd: models.RecommendationService_questToAdd{
+				ID:          int(r.Id),
+				Title:       r.Title,
+				Description: r.Description,
+				Category:    r.Category,
+			},
+			SimilarityScore: r.SimilarityScore,
+			Explanation:     r.Explanation,
+		}
+	}
+
+	profileInfo := make(map[string]any)
+	if grpcResp.UserProfileInfo != nil {
+		profileInfo["quests_count"] = grpcResp.UserProfileInfo.QuestsCount
+		profileInfo["embedding_dim"] = grpcResp.UserProfileInfo.EmbeddingDim
+		profileInfo["method"] = grpcResp.UserProfileInfo.Method
+	}
+
+	return &models.RecommendationService_RecommendQuests_Resp{
+		Recommendations: recommendations,
+		UserProfileInfo: profileInfo,
+	}, nil
 }
